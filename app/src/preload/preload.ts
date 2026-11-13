@@ -15,6 +15,7 @@ const api: SomaApi = {
     save: (saveAs) => ipcRenderer.invoke('project:save', saveAs),
     openZip: () => ipcRenderer.invoke('project:openZip'),
     openFolder: () => ipcRenderer.invoke('project:openFolder'),
+    openStartupFolder: () => ipcRenderer.invoke('project:openStartupFolder'),
     exportZip: () => ipcRenderer.invoke('project:exportZip'),
     createFromCadQuery: () => ipcRenderer.invoke('project:createFromCadQuery'),
     onCadQueryStep: (cb) => { ipcRenderer.on('cadquery:step', (_e, s) => cb(s)); },
@@ -155,7 +156,7 @@ const api: SomaApi = {
   test: process.env.SOMA_TEST === '1'
     ? {
       answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f, rect) => ipcRenderer.invoke('test:screenshot', f, rect), bridge: () => ipcRenderer.invoke('test:bridge'),
-      close: () => ipcRenderer.invoke('test:close'), clipboard: () => ipcRenderer.invoke('test:clipboard'),
+      close: () => ipcRenderer.invoke('test:close'), quit: () => ipcRenderer.invoke('test:quit'), clipboard: () => ipcRenderer.invoke('test:clipboard'),
     }
     : undefined,
 };

@@ -449,6 +449,8 @@ export interface SomaApi {
     openZip(): Promise<OpenResult>;
     /** „Open folder“ (Ordner-Modus): Ordner wählen, Hinweis, was angelegt und geändert wird, dann öffnen. */
     openFolder(): Promise<OpenResult>;
+    /** Opens the folder passed at startup, once; null if there was no request. */
+    openStartupFolder(): Promise<OpenResult | null>;
     /** Das ganze Modell als ZIP exportieren (E79), ohne Snapshot. Die Modelldatei bleibt, wie sie ist. */
     exportZip(): Promise<ExportResult>;
     /** Neues Modell aus einem CadQuery-Skript (E100): Dateidialog, Import, erster Build. */
@@ -481,7 +483,7 @@ export interface SomaApi {
   };
   /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
   test?: {
-    answers(a: unknown[]): Promise<void>; screenshot(file: string, rect?: { x: number; y: number; width: number; height: number }): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>;
+    answers(a: unknown[]): Promise<void>; screenshot(file: string, rect?: { x: number; y: number; width: number; height: number }): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>; quit(): Promise<void>;
     /** Was die App in die Zwischenablage legen wollte (im Test bleibt die echte unberührt). */
     clipboard(): Promise<string>;
   };

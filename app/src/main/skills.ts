@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { SkillCheck, SkillInfo, SkillMode, SkillSource, SkillValue, SkillVar } from '../shared/types';
 import { backupText, resolveInside } from './files';
@@ -483,12 +484,14 @@ export function applyDefaultSkills(root: string, dirs: SkillDirs, backupDir: str
 /** Text atomar schreiben: erst eine Nebendatei, dann umbenennen. */
 export function writeAtomic(file: string, text: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.soma-tmp`;
+  const tmp = `${file}.soma-tmp-${randomUUID()}`;
+  let created = false;
   try {
-    fs.writeFileSync(tmp, text, 'utf8');
+    fs.writeFileSync(tmp, text, { encoding: 'utf8', flag: 'wx' });
+    created = true;
     fs.renameSync(tmp, file);
   } catch (e) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* bleibt liegen, stört nicht */ }
+    if (created) try { fs.rmSync(tmp, { force: true }); } catch { /* bleibt liegen, stört nicht */ }
     throw e;
   }
 }

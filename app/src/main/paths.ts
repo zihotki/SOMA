@@ -4,9 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SkillDirs } from './skills';
 
+let headlessPaths: { appRoot: string; userData: string } | undefined;
+export function configureHeadlessPaths(appRoot: string, userData: string): void { headlessPaths = { appRoot, userData }; }
+
 /** App-Daten. Fuer Tests per SOMA_USER_DATA umleitbar, damit nichts im echten Profil landet. */
 export function userDataDir(): string {
-  return process.env.SOMA_USER_DATA || app.getPath('userData');
+  return headlessPaths?.userData || process.env.SOMA_USER_DATA || app.getPath('userData');
 }
 
 export const workspacesDir = () => path.join(userDataDir(), 'workspaces');
@@ -36,10 +39,11 @@ export const logsDir = () => path.join(userDataDir(), 'logs');
 export const warmDir = () => path.join(userDataDir(), 'python-start');
 
 /** Vorlage fuer neue Projekte (liegt neben dem Programm, spaeter im Installationspaket). */
-export const templateDir = () => path.join(app.getAppPath(), 'resources', 'template');
+const appRoot = () => headlessPaths?.appRoot ?? app.getAppPath();
+export const templateDir = () => path.join(appRoot(), 'resources', 'template');
 
 /** Mitgelieferte Skills (E17), je einer als Markdown. */
-export const skillsDir = () => path.join(app.getAppPath(), 'resources', 'skills');
+export const skillsDir = () => path.join(appRoot(), 'resources', 'skills');
 /** Bilder der Anleitung (E83), der Text ist der mitgelieferte Skill `soma-app.md`. */
 export const helpDir = () => path.join(app.getAppPath(), 'resources', 'help');
 /** Eigene und bearbeitete Skills des Nutzers (E78), gelten für die ganze App. */

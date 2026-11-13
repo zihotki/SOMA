@@ -13,12 +13,13 @@ import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
-import { applyFolder, planFolder, refreshFolderSection, topLevelScripts } from './folders';
+import { planFolder, preflightFolder, refreshFolderSection, topLevelScripts } from './folders';
+import { projectFolder, setupFolder } from './folder-setup';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs, userDataDir } from './paths';
+import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs } from './paths';
 import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
 import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
@@ -28,7 +29,7 @@ import {
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
-  backupWorkspace, createProject, discardWorkspace, extractProject, folderId, forgetProject, getAppState, inspectProject, isFolderProject, isProjectId, isUntouched, patchAppState, projectDir, registerFolder,
+  backupWorkspace, createProject, discardWorkspace, extractProject, forgetProject, getAppState, inspectProject, isFolderProject, isProjectId, isUntouched, patchAppState, projectDir,
   getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
@@ -195,13 +196,12 @@ export class ProjectController {
    * „Open folder“ (Ordner-Modus): SOMA in einem Ordner des Nutzers. Erst die Einstiegsdatei klären, dann sagt ein Hinweis,
    * was angelegt und was geändert wird (Wunsch des Nutzers), mit Abbrechen. Ein schon eingerichteter Ordner öffnet ohne Frage.
    */
-  async openFolder(): Promise<OpenResult> {
-    const picked = await chooseFolder(this.getWin());
+  async openFolder(requestedFolder?: string): Promise<OpenResult> {
+    const picked = requestedFolder ?? await chooseFolder(this.getWin());
     if (!picked) return { cancelled: true };
-    const dir = path.resolve(picked);
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { cancelled: false, error: `Not a folder: ${dir}` };
-    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
-    if (inside(dir, userDataDir()) || inside(userDataDir(), dir)) return { cancelled: false, error: 'This folder holds the app data of SOMA. Choose another folder.' };
+    let dir: string;
+    try { dir = projectFolder(picked); preflightFolder(dir); }
+    catch (e) { return { cancelled: false, error: e instanceof Error ? e.message : String(e) }; }
 
     // Schon eingetragen (gleicher Ordner): nur die Einstiegsdatei aus project.json prüfen
     const pj = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { entry?: unknown }; } catch { return null; } })();
@@ -224,14 +224,16 @@ export class ProjectController {
         else {
           const file = await chooseEntryScript(this.getWin(), dir);
           if (!file) return { cancelled: true };
-          const rel = path.relative(dir, file);
-          if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
+          const rel = path.relative(dir, fs.realpathSync.native(file));
+          if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
           entry = rel.split(path.sep).join('/');
         }
       }
     }
 
-    const plan = planFolder(dir, entry, createModel);
+    let plan: ReturnType<typeof planFolder>;
+    try { plan = planFolder(dir, entry, createModel); }
+    catch (e) { return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` }; }
     if (plan.create.length || plan.change.length) {
       const lines: string[] = [];
       if (plan.create.length) lines.push('Creates:', ...plan.create.map((l) => `  ${l}`));
@@ -247,12 +249,7 @@ export class ProjectController {
     }
     let id: string;
     try {
-      const r = applyFolder(plan, backupsDir());
-      id = r.id;
-      const known = folderId(dir);
-      if (known && known !== id) forgetProject(known); // derselbe Ordner unter alter Kennung (project.json ersetzt)
-      registerFolder(id, dir);
-      patchAppState(id, {}); // zweite Kopie des Projektzustands (E27)
+      id = setupFolder(plan).id;
     } catch (e) {
       return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` };
     }

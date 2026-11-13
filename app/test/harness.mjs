@@ -22,7 +22,7 @@ const portFree = (port) => new Promise((resolve) => {
  * Watchdog (hängt etwas, wird alles hart beendet). `userData` erlaubt einen Neustart mit denselben Daten, `env` setzt weitere
  * Umgebungsvariablen (etwa `SOMA_TEST_START: 'home'`: Start auf der Startseite wie außerhalb der Tests, statt gleich mit einem Modell).
  */
-export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = (Number(process.env.SOMA_TEST_WATCHDOG_S) || 6 * 60) * 1000, name = 'test', env = {} } = {}) {
+export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = (Number(process.env.SOMA_TEST_WATCHDOG_S) || 6 * 60) * 1000, name = 'test', env = {}, appArgs = [] } = {}) {
   // SMOKE_VISIBLE=1 sichtbar, =offscreen angezeigt außerhalb des Bildschirms (frische Screenshots, kein Fokusklau), sonst unsichtbar
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
@@ -37,7 +37,7 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   const packaged = process.env.SOMA_TEST_EXE;
   // SOMA_TEST_ARGS: weitere Schalter für Electron, etwa --ignore-gpu-blocklist unter xvfb (CI)
   const extra = (process.env.SOMA_TEST_ARGS ?? '').split(' ').filter(Boolean);
-  const child = spawn(packaged || electronExe(APP), [...(packaged ? [] : ['.']), `--remote-debugging-port=${port}`, ...extra], {
+  const child = spawn(packaged || electronExe(APP), [...(packaged ? [] : ['.']), `--remote-debugging-port=${port}`, ...extra, ...appArgs], {
     cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -88,7 +88,20 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
     screenshot: (file, rect) => ev(([f, r]) => window.soma.test.screenshot(f, r ?? undefined), [file, rect ?? null]),
     /** Beendet die App hart (wie ein Absturz). */
     crash() { clearTimeout(dog); page.close(); kill(); },
-    async stop() { clearTimeout(dog); page.close(); kill(); await sleep(600); },
+    async stop() {
+      clearTimeout(dog);
+      if (child.exitCode !== null || child.signalCode !== null) { page.close(); return; }
+      let timer;
+      const exited = new Promise((resolve) => {
+        child.once('exit', () => { clearTimeout(timer); resolve(); });
+        timer = setTimeout(resolve, 5000);
+      });
+      void ev(() => window.soma.test.quit()).catch(() => {}); // The app may exit before replying.
+      await exited;
+      page.close();
+      if (child.exitCode === null && child.signalCode === null) { kill(); throw new Error('Test app did not exit cleanly.'); }
+      await sleep(600);
+    },
   };
   return app;
 }
