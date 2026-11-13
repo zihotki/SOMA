@@ -127,8 +127,22 @@ export interface FolderPlan {
   change: string[];
 }
 
+export function preflightFolder(dir: string): void {
+  const soma = resolveInside(dir, '.soma');
+  let somaEntry: fs.Stats | undefined;
+  try { somaEntry = fs.lstatSync(soma); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+  if (somaEntry && (!fs.existsSync(soma) || !fs.statSync(soma).isDirectory())) throw new Error('.soma exists but is not a folder.');
+  const skills = resolveInside(dir, '.soma/skills');
+  if (fs.existsSync(skills) && !fs.statSync(skills).isDirectory()) throw new Error('.soma/skills exists but is not a folder.');
+  for (const rel of ['.soma/project.json', '.soma/.gitignore', 'AGENTS.md', 'CLAUDE.md']) {
+    const file = resolveInside(dir, rel);
+    if (fs.existsSync(file) && !fs.statSync(file).isFile()) throw new Error(`${rel} exists but is not a file.`);
+  }
+}
+
 /** Was „Open folder“ in `dir` anlegen und ändern würde. Liest nur. */
 export function planFolder(dir: string, entry: string, createModel: boolean): FolderPlan {
+  preflightFolder(dir);
   const create: string[] = [];
   const change: string[] = [];
   const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
@@ -161,8 +175,10 @@ function backupFile(file: string, backupDir: string): void {
  */
 export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string; newId: boolean } {
   const { dir, entry } = plan;
-  const pjFile = path.join(dir, '.soma', 'project.json');
+  preflightFolder(dir);
+  const pjFile = resolveInside(dir, '.soma/project.json');
   const old = readJson<ProjectJson>(pjFile);
+  if (fs.existsSync(pjFile) && !old) throw new Error('The existing .soma/project.json is invalid.');
   const taken = (id: string) => {
     const other = folderOf(id);
     if (other && fs.existsSync(other) && !sameDir(other, dir)) return true;
@@ -172,25 +188,27 @@ export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string;
   const id = keep ? old.id : randomUUID();
   const backupDir = path.join(backupRoot, `${id}-folder-${new Date().toISOString().replace(/[:.]/g, '-')}`);
   const full = isFullModel(dir);
-
-  fs.mkdirSync(path.join(dir, '.soma'), { recursive: true });
+  const somaDir = path.join(dir, '.soma');
+  // The user or agent may have created the model while the confirmation was open.
+  if (plan.createModel) fs.copyFileSync(path.join(templateDir(), 'model.py'), resolveInside(dir, 'model.py'), fs.constants.COPYFILE_EXCL);
+  fs.mkdirSync(somaDir, { recursive: true });
   const ignore = path.join(dir, '.soma', '.gitignore');
   if (!full && !fs.existsSync(ignore)) fs.writeFileSync(ignore, SOMA_GITIGNORE);
-  if (plan.createModel) fs.copyFileSync(path.join(templateDir(), 'model.py'), resolveInside(dir, 'model.py'));
 
-  const pj: ProjectJson = old
+  let pj: ProjectJson = old
     ? { ...old, id, entry }
     : { id, name: path.basename(dir), api_version: API_VERSION, app_version: SOMA_VERSION, entry, main_output: 'output/model.step', created: new Date().toISOString(), requirements: FOLDER_REQUIREMENTS };
-  if (!old || old.id !== id || old.entry !== entry) writeAtomic(pjFile, JSON.stringify(pj, null, 2));
+  if (old && (old.id !== id || old.entry !== entry)) backupFile(pjFile, backupDir);
 
   if (!full) {
     writeFolderFiles(dir, entry, backupDir);
     // Skills nach den Vorgaben (E46), nur beim ersten Einrichten. Ihre Liste kommt in den Abschnitt von AGENTS.md
     if (!old) {
       const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
-      writeAtomic(pjFile, JSON.stringify({ ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) }, null, 2));
+      pj = { ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
     }
   }
+  if (!old || old.id !== id || old.entry !== entry) writeAtomic(pjFile, JSON.stringify(pj, null, 2));
   return { id, newId: !!old && !keep };
 }
 

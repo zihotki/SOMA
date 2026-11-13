@@ -78,6 +78,17 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
   ipcMain.handle('project:openFolder', () => ctl.openFolder());
+  // A startup request is fixed by the process arguments and consumed once.
+  let startupFolderPending = true;
+  ipcMain.handle('project:openStartupFolder', async () => {
+    if (!startupFolderPending) return null;
+    startupFolderPending = false;
+    const index = process.argv.indexOf('--open-folder');
+    if (index < 0) return null;
+    const folder = process.argv[index + 1];
+    if (!folder || folder.startsWith('--')) return { cancelled: false, error: 'Provide a folder path after --open-folder.' };
+    return ctl.openFolder(folder);
+  });
   ipcMain.handle('project:exportZip', () => ctl.exportZip());
   ipcMain.handle('project:createFromCadQuery', () => ctl.createFromCadQuery());
   ipcMain.handle('project:exportCadQuery', () => ctl.exportCadQuery());
@@ -322,6 +333,7 @@ function registerIpc(ctl: ProjectController): void {
     // Adresse und Schlüssel für soma render, damit Tests es auch außerhalb eines Terminals aufrufen können
     ipcMain.handle('test:bridge', () => bridgeEnv());
     ipcMain.handle('test:clipboard', () => testClipboard);
+    ipcMain.handle('test:quit', () => { setTimeout(() => { stopBridge(); stopWarm(); app.exit(0); }, 100); });
     // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
     ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
@@ -399,7 +411,7 @@ function createWindow(): void {
   wc.once('did-finish-load', () => {
     // Die App beginnt auf der Startseite, dort stehen die zuletzt geöffneten Modelle (E69). Ein Arbeitsstand von vor einem
     // Absturz ist dort zu finden. Nur die Tests öffnen gleich das letzte Modell, sonst ein neues (SOMA_TEST_START=home nicht).
-    if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home') return;
+    if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home' || process.argv.includes('--open-folder')) return;
     void (async () => {
       try { await ctl.open(getLastProject() ?? (await createProject()).id); }
       catch (e) { console.error('[soma] Could not open the project:', e); }

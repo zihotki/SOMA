@@ -34,6 +34,17 @@ import { PickResult, Viewer, ViewName } from './viewer';
 
 hydrateIcons();
 const api = window.soma;
+let startupOpenPending = true;
+// Do not let another project open while startup confirmation is pending.
+for (const type of ['pointerdown', 'click'] as const) {
+  window.addEventListener(type, (e) => {
+    if (!startupOpenPending || (e.target instanceof Element && e.target.closest('.ask-scrim'))) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, true);
+}
+window.addEventListener('keydown', (e) => {
+  if (startupOpenPending && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
 
 /** Ladebildschirm aus index.html ausblenden. Auch bei einem Fehler im Aufbau, sonst bliebe er für immer stehen. */
 function hideBoot(): void {
@@ -2023,6 +2034,13 @@ if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 }
 // Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
 if (api.startsHome) void showStart(true);
+// Wait until the renderer and its dialog handlers are ready before opening.
+void api.project.openStartupFolder().then((result) => {
+  if (result?.opened) void showStart(false);
+  else if (result?.error) toast(result.error, 'error');
+  else if (result?.cancelled) toast('Opening the folder was cancelled.', 'info');
+}).catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), 'error'))
+  .finally(() => { startupOpenPending = false; });
 // Erst jetzt steht, was der Nutzer sehen soll, die Startseite liegt schon über der Oberfläche
 requestAnimationFrame(() => hideBoot());
 

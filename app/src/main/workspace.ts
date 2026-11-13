@@ -6,7 +6,7 @@ import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, editBackupsDir, foldersFile, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -41,7 +41,7 @@ const readJson = <T>(file: string): T | null => {
 };
 const writeJson = (file: string, value: unknown) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2));
+  writeAtomic(file, JSON.stringify(value, null, 2));
 };
 
 export const isProjectId = (id: string) => UUID.test(id);

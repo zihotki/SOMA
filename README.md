@@ -27,6 +27,22 @@ Download SOMA from [somacad.app/download](https://somacad.app/download/), which 
 - Linux needs glibc 2.31 or newer
 - SOMA shows on its start page when a new version is out. Download it from the website or the releases page
 
+### Initialize and open a folder from source
+
+This fork supports a headless initializer and direct opening. Build the app first, and use the same profile for both commands:
+
+```sh
+cd app
+npm run build
+mkdir -p "/path/to/soma-profile"
+node dist/main/init.js init "/path/to/my project" --entry model.py --profile "/path/to/soma-profile"
+SOMA_USER_DATA="/path/to/soma-profile" node scripts/start.mjs --open-folder "/path/to/my project"
+```
+
+`init` requires an existing profile folder and a Python entry script inside the project. It reports its changes as JSON, keeps the model file, and backs up existing instructions before changing them. Repeat runs are safe. `SOMA_USER_DATA` can provide the profile in place of `--profile`. If initialization is interrupted, remove a remaining `.soma-init.lock` only after checking that no initialization is running.
+
+The initialized folder opens without a setup notice. For an uninitialized folder, direct opening uses the same confirmation as **Open folder**. An invalid path or canceled setup leaves the start page open. Starting without `--open-folder` keeps normal startup. These options are specific to this fork build.
+
 ## Quick start
 
 1. Start SOMA and click **New model** on the start page. It starts from a small example, a box with a lid.
