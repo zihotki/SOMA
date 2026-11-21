@@ -212,6 +212,8 @@ export interface SkillInfo {
   mode: SkillMode;
   /** Kopie im Projekt (`.soma/skills/<id>.md`), null wenn keine da ist. */
   file: string | null;
+  /** The project resolves this skill from the shared library. */
+  shared?: boolean;
   /** Die Kopie im Projekt weicht von der mitgelieferten Fassung (mit den eingestellten Werten) ab. */
   changed: boolean;
   /** Einstellungen mit ihren aktuellen Werten (nur bei mitgelieferten Skills). */

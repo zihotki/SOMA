@@ -33,6 +33,27 @@ try {
   t.check('Init backs up changed instructions', backups.some((name) => fs.readFileSync(path.join(profile, 'workspace-backups', name, 'AGENTS.md'), 'utf8') === '# User instructions\n'));
   const second = run(...args);
   t.check('Repeated init keeps the same ID without changes', second.status === 0 && second.json.id === first.json.id && !second.json.creates.length && !second.json.changes.length);
+  const shared = path.join(work, 'shared model');
+  fs.mkdirSync(shared);
+  fs.writeFileSync(path.join(shared, 'model.py'), script);
+  const sharedArgs = ['init', shared, '--entry', 'model.py', '--profile', profile, '--skill-storage', 'shared'];
+  const sharedInit = run(...sharedArgs);
+  const sharedSettings = path.join(shared, '.soma/project.json');
+  const sharedProject = JSON.parse(fs.readFileSync(sharedSettings, 'utf8'));
+  t.check('Shared mode lists enabled skills without copying Markdown into the project', sharedInit.status === 0
+    && sharedProject.skills.includes('cadquery')
+    && !fs.existsSync(path.join(shared, '.soma/skills'))
+    && fs.readFileSync(path.join(shared, 'AGENTS.md'), 'utf8').includes('cadlab/bin/cadlab skill cadquery'));
+  sharedProject.skill_settings = { '3d-printing': { nozzle: 0.6, bed_x: 256 } };
+  fs.writeFileSync(sharedSettings, JSON.stringify(sharedProject));
+  const rules = run('skill', shared, '3d-printing', '--profile', profile);
+  t.check('Shared skills render the saved project settings', rules.status === 0
+    && rules.stdout.includes('| Nozzle | 0.6 mm |') && rules.stdout.includes('| Build volume | 256 × 220 × 250 mm |')
+    && !fs.existsSync(path.join(shared, '.soma/skills')), rules.stderr);
+  const sharedAgain = run(...sharedArgs);
+  t.check('Repeated shared init preserves settings and creates no files', sharedAgain.status === 0
+    && !sharedAgain.json.creates.length && !sharedAgain.json.changes.length
+    && JSON.parse(fs.readFileSync(sharedSettings, 'utf8')).skill_settings['3d-printing'].nozzle === 0.6);
   const beforeChange = fs.readFileSync(path.join(folder, '.soma/project.json'), 'utf8');
   fs.writeFileSync(path.join(folder, 'another.py'), script);
   const changed = run('init', folder, '--entry', 'another.py', '--profile', profile);

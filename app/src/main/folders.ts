@@ -4,7 +4,7 @@ import path from 'node:path';
 import { SOMA_VERSION } from '../shared/version';
 import { resolveInside } from './files';
 import { skillBackupsDir, skillDirs, templateDir, workspacesDir } from './paths';
-import { BEGIN as SKILLS_BEGIN, END as SKILLS_END, applyDefaultSkills, writeAtomic } from './skills';
+import { BEGIN as SKILLS_BEGIN, END as SKILLS_END, agentsEntries, applyDefaultSkills, isSkillId, usesSharedSkills, writeAgentsList, writeAtomic } from './skills';
 import { API_VERSION, folderOf, getSkillDefaults, isProjectId, type ProjectJson } from './workspace';
 
 /**
@@ -209,6 +209,10 @@ export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string;
     }
   }
   if (!old || old.id !== id || old.entry !== entry) writeAtomic(pjFile, JSON.stringify(pj, null, 2));
+  if (old && usesSharedSkills(dir)) {
+    const ids = (list: unknown) => Array.isArray(list) ? list.filter(isSkillId) : [];
+    writeAgentsList(dir, agentsEntries(dir, skillDirs(), { always: ids(pj.skills), demand: ids(pj.skills_on_demand) }));
+  }
   return { id, newId: !!old && !keep };
 }
 

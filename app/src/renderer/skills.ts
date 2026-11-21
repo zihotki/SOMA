@@ -56,6 +56,7 @@ const SOURCE_NOTE: Record<string, string> = { edited: ' · edited by you', own: 
 
 /** Text für die Eingabe des Agenten: Pfad und die vom Standard abweichenden Einstellungen. */
 export function skillNote(s: SkillInfo): string {
+  if (s.shared) return `[Skill: ${s.id}. From the CAD Lab repository root, run cadlab/bin/cadlab skill ${s.id} --project <project-folder> for this model.] `;
   const set = changedVars(s);
   return `[Skill: ${s.file}${set.length ? `, settings: ${set.map((v) => `${v.label} = ${forAgent(v)}`).join(', ')}` : ''}] `;
 }
@@ -245,17 +246,19 @@ export class SkillsPanel {
       actions.append(view);
     }
     if (s.source) {
-      const edit = el('button', { className: 'btn sm', title: 'Edit the skill in the settings. Applies to new models, and here once the copy is taken over.' }, icon('pen', 14, 1.9), 'Edit');
+      const edit = el('button', { className: 'btn sm', title: 'Edit the skill in the settings.' }, icon('pen', 14, 1.9), 'Edit');
       edit.dataset.act = 'edit';
       edit.addEventListener('click', () => this.deps.edit(s.id));
       actions.append(edit);
     }
-    if (s.mode !== 'off' && s.file) {
+    if (s.mode !== 'off' && (s.file || s.shared)) {
       const send = el('button', { className: 'btn sm acc', title: 'Add the path and customized settings to the agent’s input, so a running agent learns about them' }, icon('send', 14, 1.9), 'Send to agent');
       send.addEventListener('click', () => this.deps.insert(skillNote(s)));
       actions.append(send);
     }
-    if (!s.file) kids.push(el('div', { className: 'sk-note', textContent: 'On “On demand” or “Always”, the skill is a Markdown file in the project and can be viewed.' }));
+    if (!s.file) kids.push(el('div', { className: 'sk-note', textContent: s.shared
+      ? 'This model reads the skill from the shared library.'
+      : 'On “On demand” or “Always”, the skill is a Markdown file in the project and can be viewed.' }));
     if (actions.childElementCount) kids.push(actions);
     box.replaceChildren(...kids.filter((x): x is HTMLElement => !!x));
   }
@@ -287,6 +290,7 @@ export class SkillsPanel {
     this.deps.changed();
     const now = r.skills.find((x) => x.id === s.id) ?? s;
     const kept = r.backup ? ' The previous version in the project is in the backup.' : '';
+    if (now.shared) { this.deps.toast(`“${s.title}”: ${what(now)}.`); return; }
     this.deps.toast(`“${s.title}”: ${what(now)}. `
       + (s.mode !== 'off' ? `Written to ${s.file}. “Send to agent” tells a running agent.${kept}` : 'Applies as soon as the skill is no longer off.'));
   }

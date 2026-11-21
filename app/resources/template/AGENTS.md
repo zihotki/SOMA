@@ -18,7 +18,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `analyses/` | Optional. Load cases for `soma analyze fem` in Python (`soma.fem`), one file per load case. The skill for FEM explains them |
 | `drawings/` | Optional. Technical drawings in Python (`soma.drawing`), one file per drawing or set of sheets. `soma drawing build` writes PDF and DXF to `output/drawings/`, all sheets together to `output/drawings.pdf`. The skill for technical drawings explains them |
 | `renders/` | Pictures and videos written by `soma render`. Not in the version history and not in the saved .soma file |
-| `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results, drawing pictures). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
+| `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results, drawing pictures). Do not edit. Use the skill sources listed below and open files in `.soma/feedback/` when the user points you to them |
 
 ## Rules for model.py
 

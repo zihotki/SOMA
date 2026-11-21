@@ -4,9 +4,32 @@ import path from 'node:path';
 import { resolveInside } from '../main/files';
 import { planFolder } from '../main/folders';
 import { projectFolder, setupFolder } from '../main/folder-setup';
-import { configureHeadlessPaths } from '../main/paths';
+import { configureHeadlessPaths, skillDirs } from '../main/paths';
+import { cleanValues, isSkillId, librarySkill, renderSkill } from '../main/skills';
+import type { ProjectJson } from '../main/workspace';
 
-const usage = 'Usage: node init.js init <project-folder> --entry <script.py> --profile <profile-folder>';
+const usage = 'Usage: node init.js init <project-folder> --entry <script.py> --profile <profile-folder> [--skill-storage shared]';
+
+function setProfile(profile: string): void {
+  const dir = path.resolve(profile);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`Not a profile folder: ${dir}`);
+  configureHeadlessPaths(path.resolve(__dirname, '../..'), fs.realpathSync.native(dir));
+}
+
+function printSkill(args: string[]): void {
+  const [folder, id, option, profile] = args;
+  if (args.length !== 4 || !folder || !isSkillId(id) || option !== '--profile' || !profile) {
+    throw new Error('Usage: node init.js skill <project-folder> <skill-id> --profile <profile-folder>');
+  }
+  setProfile(profile);
+  const dir = projectFolder(folder);
+  const skill = librarySkill(skillDirs(), id);
+  if (!skill) throw new Error(`The skill “${id}” is missing from the shared library.`);
+  const file = resolveInside(dir, '.soma/project.json');
+  const project = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) as ProjectJson : null;
+  const mode = project?.skills?.includes(id) || (!project && skill.defaultMode === 'always') ? 'always' : 'demand';
+  process.stdout.write(renderSkill(skill.text, cleanValues(skill.vars, project?.skill_settings?.[id]), mode));
+}
 
 function setupFiles(dir: string): Map<string, string> {
   const files = new Map<string, string>();
@@ -25,22 +48,25 @@ function setupFiles(dir: string): Map<string, string> {
 
 function run(args: string[]): void {
   const [command, folder, ...options] = args;
+  if (command === 'skill') return printSkill(args.slice(1));
   if (command !== 'init' || !folder || folder.startsWith('--')) throw new Error(usage);
   let entry = '';
   let profile = process.env.SOMA_USER_DATA ?? '';
+  let sharedSkills = false;
   const seen = new Set<string>();
   for (let i = 0; i < options.length; i += 2) {
     const key = options[i], value = options[i + 1];
-    if ((key !== '--entry' && key !== '--profile') || !value || value.startsWith('--') || seen.has(key)) throw new Error(usage);
+    if (!['--entry', '--profile', '--skill-storage'].includes(key) || !value || value.startsWith('--') || seen.has(key)) throw new Error(usage);
     seen.add(key);
     if (key === '--entry') entry = value;
-    else profile = value;
+    else if (key === '--profile') profile = value;
+    else if (value === 'shared') sharedSkills = true;
+    else throw new Error(usage);
   }
   if (!entry || !profile || path.isAbsolute(entry) || path.extname(entry).toLowerCase() !== '.py') throw new Error(usage);
-  const profileDir = path.resolve(profile);
-  if (!fs.existsSync(profileDir) || !fs.statSync(profileDir).isDirectory()) throw new Error(`Not a profile folder: ${profileDir}`);
-  configureHeadlessPaths(path.resolve(__dirname, '../..'), fs.realpathSync.native(profileDir));
+  setProfile(profile);
   const dir = projectFolder(folder);
+  if (sharedSkills) process.env.SOMA_SHARED_SKILLS_PROJECT = dir;
   const script = resolveInside(dir, entry);
   if (!fs.existsSync(script) || !fs.statSync(script).isFile()) throw new Error(`Entry script does not exist: ${entry}`);
   const relativeEntry = path.relative(dir, script).split(path.sep).join('/');

@@ -6,7 +6,7 @@ import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, editBackupsDir, foldersFile, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, librarySkills, usesSharedSkills, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -206,7 +206,9 @@ export function inspectProject(id: string): { name: string; problems: string[] }
   }
   const entry = pj?.entry ?? 'model.py';
   if (!fs.existsSync(path.join(dir, entry))) problems.push(`Entry point ${entry} is missing.`);
+  const shared = usesSharedSkills(dir) ? librarySkills(skillDirs()) : null;
   for (const s of [pj?.skills, pj?.skills_on_demand].flatMap((x) => (Array.isArray(x) ? x : [])).filter(isSkillId)) {
+    if (shared?.has(s) || shared?.has(currentSkillId(s))) continue;
     if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`The skill “${s}” is switched on, but ${SKILLS_DIR}/${s}.md is missing.`);
   }
   // Ein geöffneter Ordner darf eigene Umgebungen haben, sie gehören dem Nutzer

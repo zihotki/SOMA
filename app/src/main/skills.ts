@@ -373,6 +373,12 @@ export const librarySkill = (dirs: SkillDirs, id: string): LibSkill | undefined 
 
 const relOf = (id: string) => `${SKILLS_DIR}/${id}.md`;
 
+export function usesSharedSkills(root: string): boolean {
+  return process.env.SOMA_SHARED_SKILLS_PROJECT === path.resolve(root);
+}
+
+const sharedRef = (id: string) => `cadlab/bin/cadlab skill ${id} --project <project-folder>`;
+
 /** Kopie im Projekt, sofern lesbar. Der Pfad geht durch resolveInside: Ein Verweis nach außen wird nicht gelesen. */
 function projectCopy(root: string, id: string): string | null {
   try { return readSkillFile(resolveInside(root, relOf(id))); } catch { return null; }
@@ -413,7 +419,8 @@ export function listSkills(root: string, dirs: SkillDirs, modes: SkillModes | nu
   const ids = [...new Set([...[...bundled.keys()].filter((id) => !renamed.has(id) || used.includes(id)), ...used])];
   const out: SkillInfo[] = ids.map((id) => {
     const b = inLibrary(bundled, id);
-    const copy = projectCopy(root, id);
+    const shared = !!b && usesSharedSkills(root);
+    const copy = shared ? null : projectCopy(root, id);
     const meta = b ?? (copy != null ? parseSkill(id, copy) : null);
     const mode = modeOf(known, id);
     // Einstellen lassen sich nur Skills der Bibliothek: Nur dort gibt es den Text mit Platzhaltern
@@ -424,14 +431,15 @@ export function listSkills(root: string, dirs: SkillDirs, modes: SkillModes | nu
     const info: SkillInfo = {
       id, title: meta?.title ?? id, summary: showText(meta?.summary ?? '', vars, values), topics: (meta?.topics ?? []).map((x) => showText(x, vars, values)),
       order: meta?.order ?? 100, category: meta?.category ?? '', source: b?.source ?? null, mode, file: copy != null ? relOf(id) : null,
+      ...(shared ? { shared: true } : {}),
       // Für neue Modelle gibt es nur, was die Bibliothek hat
       defaultMode: b ? (defaults[b.id] ?? b.defaultMode) : 'off',
       changed: !!b && copy != null && !(mode === 'off' ? ON_MODES.some(rendered) : rendered(mode)),
       vars: vars.map((v) => ({ ...v, value: values[v.name] ?? v.default })),
       problems: [],
     };
-    const rel = relOf(id);
-    if (mode !== 'off' && copy == null) info.problems.push(`Set to “${MODE_LABEL[mode]}”, but ${rel} is missing or unreadable. The agent does not find the rules.`);
+    const rel = shared ? sharedRef(id) : relOf(id);
+    if (mode !== 'off' && copy == null && !shared) info.problems.push(`Set to “${MODE_LABEL[mode]}”, but ${rel} is missing or unreadable. The agent does not find the rules.`);
     if (mode === 'off' && copy != null) info.problems.push(`Off, but ${rel} is still in the project.`);
     if (mode !== 'off' && agents != null && !agents[mode].includes(rel)) {
       const other: OnMode = mode === 'always' ? 'demand' : 'always';
@@ -504,6 +512,7 @@ export function writeAtomic(file: string, text: string): void {
  */
 export function copySkill(root: string, dirs: SkillDirs, id: string, backupDir: string, values: SkillValues, mode: OnMode, prev?: SkillValues): string | null {
   const b = librarySkill(dirs, id);
+  if (b && usesSharedSkills(root)) return null;
   const abs = resolveInside(root, relOf(id));
   const old = projectCopy(root, id);
   if (!b) {
@@ -524,6 +533,7 @@ export function copySkill(root: string, dirs: SkillDirs, id: string, backupDir: 
  * jederzeit neu anlegen und wird einfach gelöscht, alles andere kommt vorher in die Sicherung.
  */
 export function removeSkill(root: string, dirs: SkillDirs, id: string, backupDir: string, values: SkillValues): string | null {
+  if (usesSharedSkills(root) && librarySkill(dirs, id)) return null;
   const abs = resolveInside(root, relOf(id));
   const old = projectCopy(root, id);
   if (old == null) { fs.rmSync(abs, { force: true }); return null; }
@@ -534,7 +544,7 @@ export function removeSkill(root: string, dirs: SkillDirs, id: string, backupDir
 }
 
 /** Eintrag in AGENTS.md: Pfad aus der Kennung, englischer Name, bei „Bei Bedarf“ der Anlass. */
-export interface AgentsEntry { id: string; name: string; when: string; mode: OnMode }
+export interface AgentsEntry { id: string; name: string; when: string; mode: OnMode; shared?: boolean }
 
 /**
  * Abschnitt der AGENTS.md mit den eingeschalteten Skills (auf Englisch wie der Rest der Datei): „Immer“ mit der Pflicht,
@@ -545,19 +555,22 @@ export function skillsBlock(entries: AgentsEntry[]): string {
   const always = entries.filter((e) => e.mode === 'always');
   const demand = entries.filter((e) => e.mode === 'demand');
   const lines = [BEGIN, '## Skills', ''];
+  const ref = (entry: AgentsEntry) => entry.shared ? sharedRef(entry.id) : relOf(entry.id);
+  if (entries.some((e) => e.shared)) lines.push(
+    'Run each CAD Lab command from the repository root. Replace `<project-folder>` with this project\'s path.', '');
   if (!entries.length) lines.push('No skills are switched on for this model. The user can switch on rule sets (for example 3D printing) in the app.');
   if (always.length) {
     lines.push('### Always follow', '',
-      'The user switched these rule sets on for this model. **Read each file before you change the model and follow it.**',
+      'The user switched these rule sets on for this model. **Read each skill before you change the model and follow it.**',
       'They take precedence over your general habits, but not over explicit wishes of the user. If a rule cannot be met, say so.', '');
-    for (const e of always) lines.push(`- \`${relOf(e.id)}\`: ${e.name}`);
+    for (const e of always) lines.push(`- \`${ref(e)}\`: ${e.name}`);
     if (demand.length) lines.push('');
   }
   if (demand.length) {
     lines.push(DEMAND_HEAD, '',
       'These rule sets are available, but not switched on for every change. **Read one as soon as the conversation turns to',
       'its topic** (for example the user wants the part 3D printed), not all of them up front. Follow it while the topic applies.', '');
-    for (const e of demand) lines.push(`- \`${relOf(e.id)}\`: ${e.name}${e.when ? `. Read when ${e.when}.` : ''}`);
+    for (const e of demand) lines.push(`- \`${ref(e)}\`: ${e.name}${e.when ? `. Read when ${e.when}.` : ''}`);
   }
   lines.push(END);
   return lines.join('\n');
@@ -578,7 +591,9 @@ export function agentsEntries(root: string, dirs: SkillDirs, modes: SkillModes):
   };
   const always = modes.always.map((id) => entry(id, 'always'));
   const demand = sortSkills(modes.demand.filter((id) => !modes.always.includes(id)).map((id) => entry(id, 'demand')));
-  return [...always, ...demand].map(({ id, name, when, mode }) => ({ id, name, when, mode }));
+  return [...always, ...demand].map(({ id, name, when, mode }) => ({
+    id, name, when, mode, ...(usesSharedSkills(root) && inLibrary(bundled, id) ? { shared: true } : {}),
+  }));
 }
 
 /**
