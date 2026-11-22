@@ -118,8 +118,8 @@ export class Markup {
     // Übernommen wird mit Enter, beim nächsten Klick auf die Zeichenfläche und beim Abschicken, bewusst nicht beim
     // Verlassen des Felds: Ein Blur-Ereignis käme je nach Klickreihenfolge einem gerade neu geöffneten Feld in die Quere.
     window.addEventListener('keydown', (e) => {
-      // Im Terminal gehört Escape dem Agenten (Claude Code unterbricht damit), im Textfeld dem Textfeld
-      if (!this.active || e.target === ui.text || (e.target as HTMLElement | null)?.closest?.('#terminals')) return;
+      // Text fields handle their own keys.
+      if (!this.active || e.target === ui.text) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === 'Escape') { e.preventDefault(); this.escape(); }
       else if (e.ctrlKey && !e.altKey && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); this.redo(); }
@@ -738,7 +738,7 @@ export class Markup {
     const what = this.blankBg ? 'Blank canvas. The image is saved in '
       : this.sourceFile ? `Image ${this.sourceFile}. The markup is saved as a new file in ` : `Viewer image from ${fmtWhen(this.takenAt)}. It is saved in `;
     u.hint.replaceChildren(what,
-      el('code', { textContent: '.soma/feedback/' }), ', and its path goes into the agent’s input. Scroll to zoom, drag with the right mouse button to pan, Ctrl 0 fits.');
+      el('code', { textContent: '.soma/feedback/' }), ' and linked to the comment. Scroll to zoom, drag with the right mouse button to pan, Ctrl 0 fits.');
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------

@@ -122,7 +122,7 @@ export class AnalysisPanel {
     const pick = tool.pickText();
     this.ui.pick.hidden = !pick;
     this.ui.pick.textContent = pick ?? '';
-    this.ui.pick.title = pick ? 'Clicked in the model. “Send to agent” passes this spot along.' : '';
+    this.ui.pick.title = pick ? 'The comment references this location.' : '';
   }
 
   /** Eine Zahl groß, darunter ob es hält, die kritischen Teile mit Sprung zur Stelle und ein Hinweis zur Netzabhängigkeit. */

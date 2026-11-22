@@ -26,7 +26,6 @@ import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
-import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, discardWorkspace, extractProject, forgetProject, getAppState, inspectProject, isFolderProject, isProjectId, isUntouched, patchAppState, projectDir,
@@ -41,7 +40,6 @@ interface Session {
   /** Geöffneter Ordner des Nutzers (Ordner-Modus, folders.ts): kein git init, Snapshot, Restore oder Speichern als .soma. */
   folder: boolean;
   builds: BuildManager;
-  terminals: TerminalManager;
   git: GitRepo;
   measure: MeasureService;
   /** Animationen bauen (E58), ausgelöst vom Watcher, der Oberfläche oder vor einem Video. */
@@ -126,7 +124,6 @@ export class ProjectController {
     s.anims.dispose();
     s.drawings.dispose();
     s.builds.dispose();
-    s.terminals.killAll();
     s.measure.stop();
     this.session = null;
   }
@@ -140,10 +137,7 @@ export class ProjectController {
     const s = this.session;
     if (!s) return;
     const untouched = await isUntouched(s.id);
-    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind
-    const shells = untouched ? s.terminals.killAllAndWait() : null;
     this.close();
-    if (shells) await shells;
     if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Could not discard the unchanged model ${s.id} (folder in use), it stays.`);
   }
 
@@ -154,7 +148,6 @@ export class ProjectController {
     const folder = isFolderProject(id);
     if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
-    const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
     // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
     // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus
@@ -168,10 +161,9 @@ export class ProjectController {
     const drawings = new DrawingBuilder(dir, () => this.send('drawings:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
       (rel) => this.animFileChanged(rel), () => builds.externalResult(), () => this.send('drawings:changed'));
-    // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
-    // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
+    // Initialize the project environment before package installation.
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, folder, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, folder, builds, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
@@ -238,10 +230,10 @@ export class ProjectController {
       const lines: string[] = [];
       if (plan.create.length) lines.push('Creates:', ...plan.create.map((l) => `  ${l}`));
       if (plan.change.length) lines.push(...(lines.length ? [''] : []), 'Changes:', ...plan.change.map((l) => `  ${l}`), '', 'Changed files are backed up first.');
-      lines.push('', 'Your other files stay as they are. SOMA does not create a Git repository or commit here.');
+      lines.push('', 'The viewer uses the existing folder and its version history.');
       const c = await choose(this.getWin(), {
         title: 'Open folder',
-        message: plan.change.length ? `SOMA creates and changes files in ${path.basename(dir)}.` : `SOMA creates files in ${path.basename(dir)}.`,
+        message: plan.change.length ? `CAD Lab Viewer creates and changes files in ${path.basename(dir)}.` : `CAD Lab Viewer creates files in ${path.basename(dir)}.`,
         detail: `${dir}\n\n${lines.join('\n')}`,
         buttons: ['Open', 'Cancel'],
       });
@@ -257,8 +249,8 @@ export class ProjectController {
     return { cancelled: false, opened: true };
   }
 
-  async create(name?: string): Promise<ProjectInfo> {
-    const { id } = await createProject(name);
+  async create(): Promise<ProjectInfo> {
+    const { id } = await createProject();
     return this.open(id);
   }
 
@@ -621,7 +613,7 @@ export class ProjectController {
     if (isFolderProject(id)) {
       const c = await choose(this.getWin(), {
         title: 'Open model', message: 'This file is a copy of a model you opened as a folder.',
-        detail: `The folder: ${dir}\nSOMA does not replace a folder of yours with a file. To work on the file separately, open it on another computer or move the folder first.`,
+        detail: `The folder: ${dir}\nCAD Lab Viewer keeps your existing folder. To work on the file separately, open it on another computer or move the folder first.`,
         buttons: ['Open the folder', 'Cancel'],
       });
       if (c !== 0) return { cancelled: true };
@@ -787,7 +779,7 @@ export class ProjectController {
 
   async restore(hash: string): Promise<RestoreResult> {
     const s = this.need();
-    if (s.folder) return { cancelled: false, error: 'SOMA does not restore versions in a folder you opened. Use Git or your agent for that.' };
+    if (s.folder) return { cancelled: false, error: 'Use Git to restore versions in an open folder.' };
     const commit = (await s.git.log()).find((c) => c.hash === hash);
     if (!commit) return { cancelled: false, error: 'This version no longer exists in the history.' };
     const c = await choose(this.getWin(), {
@@ -936,7 +928,7 @@ export class ProjectController {
   }
 
   /** Bild oder Video rendern. Vorher den laufenden Build abwarten, damit das aktuelle Modell zu sehen ist. */
-  private async render(req: RenderRequest, byAgent: boolean): Promise<RenderResult> {
+  private async render(req: RenderRequest, fromCli: boolean): Promise<RenderResult> {
     const s = this.need();
     await s.builds.whenIdle();
     const warnings: string[] = [];
@@ -944,13 +936,13 @@ export class ProjectController {
     else if (s.builds.status.stale) warnings.push('The code is newer than the last build (auto build is off). The last build is shown.');
     const r = await this.renders.run(s.dir, req, (f) => this.send('render:progress', f));
     const res = { ...r, warnings: [...warnings, ...r.warnings] };
-    this.send('render:notice', { ...res, kind: req.kind, byAgent });
+    this.send('render:notice', { ...res, kind: req.kind, fromCli });
     if (r.ok) this.send('fs:changed');
     return res;
   }
 
-  /** Auftrag von `soma render` aus einem Terminal der App (über bridge.ts). */
-  async renderForAgent(body: unknown): Promise<{ status: number; body: unknown }> {
+  /** Render request from the local CLI bridge. */
+  async renderFromCli(body: unknown): Promise<{ status: number; body: unknown }> {
     const s = this.session;
     if (!s) return { status: 409, body: { ok: false, error: 'No model is open in the app.' } };
     const project = String((body as { project?: unknown } | null)?.project ?? '');
@@ -1121,7 +1113,7 @@ export class ProjectController {
     if (!st.unsaved && !editor.dirty.length) return true;
     const inEditor = editor.dirty.length ? `Not yet saved in the editor: ${editor.dirty.join(', ')}. ` : '';
     const c = await choose(this.getWin(), {
-      title: 'Quit SOMA',
+      title: 'Quit CAD Lab Viewer',
       message: 'The model has unsaved changes.',
       detail: `${inEditor}Your current work stays on this computer, the start page shows it among the recent models. The model file is only updated when you save.`,
       buttons: ['Save', 'Don’t save', 'Cancel'],

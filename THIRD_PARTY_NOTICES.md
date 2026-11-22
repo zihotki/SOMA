@@ -3,44 +3,22 @@
 SOMA itself is licensed under the GNU General Public License, version 3 or (at your option) any later version
 (`GPL-3.0-or-later`, see `LICENSE`), with an additional permission for the models you create (`MODEL-EXCEPTION.md`).
 
-The SOMA installers (Windows, macOS, Linux) also contain the third-party components listed below. Each keeps its own
-license. All of them are free software or open source and may be distributed together with SOMA. Points that need a
-remark are listed under [Notes](#notes).
-
-Versions are those of SOMA 0.6.2. The exact list of Python packages in an installed copy is in
-`resources/python/SOMA-RUNTIME.txt`, the CalculiX packages in `resources/python/ccx/PACKAGES.txt`. In the app,
-Settings > About shows the main components with version and license.
+CAD Lab Viewer uses the third-party components listed below. The app shows the active component versions and licenses under Settings > About.
 
 ## Where to find the license texts
 
-Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where `resources` is `Resources`).
+- Application and model terms are in `LICENSE` and `MODEL-EXCEPTION.md`.
+- Electron and Chromium notices are in the Electron distribution in `app/node_modules/electron/dist/`.
+- Runtime npm license texts are copied to `app/dist/licenses/<package>@<version>/` when the app builds.
+- The viewer's pdf.js resources are in `app/dist/renderer/pdfjs/`.
+- Dugite provides Git in `app/node_modules/dugite/git/`.
+- The Python environment contains license texts for its installed packages in `site-packages/`.
 
-| What | Location |
-|---|---|
-| SOMA | `resources/LICENSE.txt`, `resources/MODEL-EXCEPTION.md`, this file in `resources/THIRD_PARTY_NOTICES.md` |
-| Electron, Chromium, Node.js | `LICENSE.electron.txt`, `LICENSES.chromium.html` (next to the program; macOS: in the app bundle) |
-| npm packages bundled into the app | `resources/app/dist/licenses/<package>@<version>/` |
-| pdf.js data (fonts, decoders) | `resources/app/dist/renderer/pdfjs/LICENSE`, `.../pdfjs/standard_fonts/LICENSE_*`, `.../pdfjs/wasm/LICENSE_*` |
-| Git (dugite) | `resources/app/node_modules/dugite/git/LICENSE.txt` and the `share/licenses` folders below it |
-| node-pty | `resources/app/node_modules/node-pty/LICENSE`, winpty in `resources/app/dist/licenses/node-pty__winpty/` |
-| Python | `resources/python/LICENSE.txt` (Windows) or `resources/python/lib/python3.12/LICENSE.txt` |
-| Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
-| gmsh | `resources/python/share/doc/gmsh/LICENSE.txt` |
-| CalculiX and its libraries | `resources/python/ccx/licenses/<package>/` |
-| Fastener tables | `resources/python/.../site-packages/soma/data/fasteners/LICENSE-bd_warehouse.txt` |
-
-## Source code
-
-SOMA: the source of each release is the tagged commit `vX.Y.Z` at https://github.com/Kai-Jungsthoefel/SOMA.
-
-The corresponding source of the components under the GPL or LGPL (and of the other components) is available from the
-upstream projects at the URLs given below, for the version listed. If a link no longer leads to the exact version,
-open an issue at https://github.com/Kai-Jungsthoefel/SOMA/issues and the source will be provided.
+See the upstream projects in the tables for their source and license terms.
 
 ## Desktop app: Electron and npm packages
 
-The app is bundled with esbuild. The packages are compiled into `resources/app/dist/`, except dugite and node-pty, which
-ship as their package folders.
+Esbuild bundles the app in `app/dist/`. Dugite runs from its package folder.
 
 | Component | Version | License (SPDX) | Upstream | GPL-3.0+ compatible |
 |---|---|---|---|---|
@@ -48,8 +26,6 @@ ship as their package folders.
 | @codemirror/autocomplete, commands, lang-css, lang-html, lang-javascript, lang-markdown, lang-python, language, lint, search, state, view | 6.x (see `dist/licenses`) | MIT | https://github.com/codemirror | yes |
 | @lezer/common, css, highlight, html, javascript, lr, markdown, python | 1.x | MIT | https://github.com/lezer-parser | yes |
 | @marijn/find-cluster-break, crelt, style-mod, w3c-keyname | 1.0.4, 1.0.7, 4.1.4, 2.2.8 | MIT | https://github.com/marijnh | yes |
-| @xterm/xterm | 6.0.0 | MIT | https://github.com/xtermjs/xterm.js | yes |
-| @xterm/addon-fit, @xterm/addon-webgl | 0.11.0, 0.19.0 | MIT | https://github.com/xtermjs/xterm.js | yes |
 | three | 0.180.0 | MIT | https://github.com/mrdoob/three.js | yes |
 | three-mesh-bvh | 0.9.15 | MIT | https://github.com/gkjohnson/three-mesh-bvh | yes |
 | marked | 18.1.0 | MIT | https://github.com/markedjs/marked | yes |
@@ -57,17 +33,14 @@ ship as their package folders.
 | pdfjs-dist (pdf.js) | 6.4.299 | Apache-2.0 | https://github.com/mozilla/pdf.js | yes |
 | yauzl, yazl | 3.4.0, 3.3.1 | MIT | https://github.com/thejoshwolfe/yauzl, https://github.com/thejoshwolfe/yazl | yes |
 | buffer-crc32, pend | 1.0.0, 1.2.0 | MIT | https://github.com/brianloveswords/buffer-crc32, https://github.com/andrewrk/node-pend | yes |
-| node-pty | 1.1.0 | MIT | https://github.com/microsoft/node-pty | yes |
-| winpty (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/rprichard/winpty | yes |
-| ConPTY / OpenConsole (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/microsoft/terminal | yes |
 | dugite | 3.2.3 | MIT | https://github.com/desktop/dugite | yes |
 
 `dist/licenses` also holds the license texts of packages that npm installs as dependencies of the above but that are not
 needed at run time (for example the download helpers of dugite).
 
-## Bundled Python runtime
+## Development Python environment
 
-Python 3.12.15 from python-build-standalone (installed with uv), plus the packages from
+The development environment uses the packages from
 `python/requirements-base.txt` and `soma` itself. Package licenses as stated in their metadata, with the libraries the
 wheels bundle where relevant.
 

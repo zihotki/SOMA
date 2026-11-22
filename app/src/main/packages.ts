@@ -8,7 +8,7 @@ import { pythonEnv, pythonExe, warmDir } from './paths';
 /**
  * Projektumgebung (E25, E67): eine kleine venv je Modell unter .soma/env, angelegt von `soma env` (python/soma/env.py).
  * Sie sieht die Basisumgebung, kostet daher nur rund 0,6 MB, und der Agent installiert Zusatzpakete einfach mit pip (die
- * Terminals leiten pip per PIP_PYTHON hierher, terminals.ts). Die Umgebung kommt weder in die ZIP noch in Git. Was das
+ * Use this environment for project packages. The environment stays local. Was das
  * Modell davon importiert, hält `soma build` in requirements.txt fest. Fehlt davon etwas (anderer Rechner, alter Stand
  * wiederhergestellt), installiert die App es vor dem nächsten Build.
  */
@@ -18,7 +18,7 @@ const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface EnvPaths { env: string; scripts: string; python: string }
 
-/** Pfade der Projektumgebung. Stehen fest, bevor es sie gibt: Terminals bekommen sie gleich beim Öffnen. */
+/** Paths of the project environment. */
 export function envPaths(dir: string): EnvPaths {
   const env = path.join(dir, '.soma', 'env');
   const scripts = path.join(env, WIN ? 'Scripts' : 'bin');

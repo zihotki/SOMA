@@ -36,9 +36,9 @@ export function readUserParams(dir: string): UserParams {
   }
   let data: unknown;
   try { data = JSON.parse(text.replace(/^﻿/, '')); } catch (e) {
-    return { rest: {}, values: {}, error: `${PARAMS_FILE} is not valid JSON (${msg(e)}). The defaults from the code apply. Ask the agent to fix the file.` };
+    return { rest: {}, values: {}, error: `${PARAMS_FILE} is not valid JSON (${msg(e)}). The defaults from the code apply. Correct parameters.json to use your values.` };
   }
-  if (!isObject(data) || !isObject(data.values)) return { rest: {}, values: {}, error: `${PARAMS_FILE} has no “values” object. The defaults from the code apply. Ask the agent to fix the file.` };
+  if (!isObject(data) || !isObject(data.values)) return { rest: {}, values: {}, error: `${PARAMS_FILE} has no “values” object. The defaults from the code apply. Correct parameters.json to use your values.` };
   const { values, ...rest } = data;
   const out: Record<string, ParamValue> = {};
   for (const [k, v] of Object.entries(values)) if (isParamValue(v)) out[k] = v;

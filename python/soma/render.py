@@ -1,9 +1,7 @@
-"""`soma render`: Bilder und Videos des Modells, gerendert von der App (E58).
+"""Render images through the authenticated local viewer bridge.
 
-Die App zeichnet mit demselben Viewer wie auf dem Bildschirm, in einem unsichtbaren Fenster. Dieser Befehl bereitet den
-Auftrag vor (Animation bauen, Ergebnis suchen) und schickt ihn ueber eine lokale Verbindung an die App. Die Adresse und
-ein Schluessel stehen in den Umgebungsvariablen der Terminals der App (SOMA_APP, SOMA_APP_TOKEN). Fehlen sie (Agenten
-wie Codex fuehren Befehle teils mit fremder Umgebung aus), gilt `bridge.json` in den App-Daten, neben `workspaces/`.
+A selected SOMA_USER_DATA profile supplies the bridge connection. Without a
+profile, native SOMA callers can use their environment or workspace bridge.
 """
 import http.client
 import json
@@ -147,20 +145,27 @@ def bridge_file(root):
 
 
 def _connection(project):
-    """Adresse und Schluessel: aus der Umgebung, sonst aus `bridge.json` der App."""
-    addr, token = os.environ.get("SOMA_APP"), os.environ.get("SOMA_APP_TOKEN")
-    if addr and token:
-        return addr, token
-    f = bridge_file(project)
+    """Use the selected profile when set; never fall back to another viewer."""
+    profile = os.environ.get("SOMA_USER_DATA")
+    if profile:
+        f = Path(profile) / "bridge.json"
+    else:
+        addr, token = os.environ.get("SOMA_APP"), os.environ.get("SOMA_APP_TOKEN")
+        if addr and token:
+            return addr, token
+        f = bridge_file(project)
     if f:
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
-            if data.get("app") and data.get("token"):
-                return str(data["app"]), str(data["token"])
+            if isinstance(data, dict):
+                addr, token = data.get("app"), data.get("token")
+                if isinstance(addr, str) and isinstance(token, str) and token.strip():
+                    match = re.fullmatch(r"127\.0\.0\.1:(\d{1,5})", addr)
+                    if match and 1 <= int(match.group(1)) <= 65535:
+                        return addr, token
         except (OSError, ValueError):
             pass
-    raise RenderError("soma render needs the running app: open this model in SOMA and run the command in its folder "
-                      "(the app's terminals have the connection in SOMA_APP and SOMA_APP_TOKEN).")
+    raise RenderError("The viewer for this project is unavailable. Open the project in CAD Lab Viewer and try again.")
 
 
 def send(job, timeout=900):
@@ -174,7 +179,7 @@ def send(job, timeout=900):
         resp = conn.getresponse()
         data = json.loads(resp.read().decode("utf-8") or "{}")
     except (OSError, ValueError) as e:
-        raise RenderError(f"The app does not answer ({addr}): {e}. Is it still running? New terminals get the new address.") from None
+        raise RenderError(f"The viewer for this project does not answer ({addr}): {e}. Is it still running?") from None
     if not data.get("ok"):
         raise RenderError(data.get("error") or f"The app reports an error (HTTP {resp.status})")
     data["warnings"] = job.get("warnings", []) + data.get("warnings", [])

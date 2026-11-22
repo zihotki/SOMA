@@ -56,9 +56,9 @@ try {
   await waitFor('Dokument offen', () => window.__t.editor.state().pane === 'soma:drawings', 5000).catch(() => {});
   const lay = await ev(() => ({ ...window.__t.layout(), pressed: document.getElementById('btn-rail-drawings').getAttribute('aria-pressed'), empty: document.querySelector('.dw-empty')?.textContent ?? null }));
   check('Leiste öffnet „Drawings“ in der Code-Spalte, ohne Seitenleiste, Knopf gedrückt', lay.code && !lay.side && lay.pressed === 'true', JSON.stringify(lay));
-  check('Ohne Zeichnungen: Hinweis, wie man den Agenten fragt', /No drawings yet/.test(lay.empty ?? '') && /drawings\/\*\.py/.test(lay.empty ?? ''), lay.empty);
+  check('Empty Drawings panel explains how to build a drawing', /No drawings yet.*drawings\/.*soma drawing build/.test(lay.empty ?? ''), lay.empty);
 
-  // 2) Gebaut aus dem Terminal (wie der Agent): Das Dokument zieht von selbst nach
+  // An external drawing build refreshes the open Drawings panel.
   fs.mkdirSync(path.join(proj.dir, 'drawings'), { recursive: true });
   fs.writeFileSync(path.join(proj.dir, 'drawings', 'plate.py'), SHEET);
   const b = soma(proj.dir, 'drawing', 'build');
@@ -113,6 +113,17 @@ try {
   st = await ev(() => window.__t.drawings());
   check('Klick auf ein Maß: Maßzahl und zwei Punkte im Bild', marks.labels.includes('120') && marks.pts === 2 && /measured 120 mm/.test(st?.card ?? ''), JSON.stringify(marks) + ' ' + st?.card);
   check('Schnitt aus der Zeichnung wieder aus', !(await ev(() => window.__t.section().active)));
+  await ev(() => document.querySelector('.dw-cacts button.acc').click());
+  await ev(() => {
+    const dialog = document.querySelector('.review-dialog');
+    dialog.querySelector('textarea').value = 'Check this length.';
+    dialog.querySelector('form').requestSubmit();
+  });
+  await waitFor('drawing comment saved', () => !document.querySelector('.review-dialog[open]'));
+  const [drawingNote] = await ev(() => window.soma.review.list(window.__t.project().id));
+  check('Drawing comment records the value, drawing source, and sheet revision',
+    drawingNote?.text === 'Check this length.' && /120 mm/.test(drawingNote.reference)
+    && drawingNote.reference.includes('drawings/plate.py') && drawingNote.buildId === idx.build && !drawingNote.stale);
 
   // 7) Durchmesser in der Draufsicht: Kreis um den Mittelpunkt
   const dd = idx.dims.find((d) => d.kind === 'diameter');
@@ -142,6 +153,7 @@ try {
   await ev(() => window.__t.drawingsSelectNone());
 
   // 10) Modell geändert: Blatt veraltet
+  const previousBuild = await ev(() => window.__t.mapBuild());
   fs.appendFileSync(path.join(proj.dir, 'model.py'), '# geändert\n');
   // Dateiänderungen frischen die offenen Reiter auf, auch das Dokument
   await waitFor('veraltet', () => window.__t.drawings()?.sheets[0]?.stale === true, 10000).catch(() => {});
@@ -149,7 +161,9 @@ try {
   check('Geändertes Modell: Blatt „older than the code“', st?.sheets[0]?.stale === true && /older than the code/.test(st.heads[0] ?? ''), JSON.stringify(st?.heads));
 
   // 11) Neues Blatt, während das Dokument nicht vorne steht: Punkt am Knopf
-  await waitFor('Modell neu gebaut', () => window.__t.status().state === 'ok', 90000).catch(() => {});
+  await waitFor('model rebuilt', (build) => window.__t.status().state === 'ok' && window.__t.mapBuild() !== build, 90000, previousBuild);
+  const [oldNote] = await ev(() => window.soma.review.list(window.__t.project().id));
+  check('Rebuilding the model flags the older drawing comment', oldNote?.stale === true);
   await ev(() => window.__t.openCode('model.py'));
   fs.writeFileSync(path.join(proj.dir, 'drawings', 'second.py'), 'from soma.drawing import Sheet\nsh = Sheet("Second", size="A4", scale="1:2")\nsh.view("Pin", "front", at=(105, 150))\n');
   const b2 = soma(proj.dir, 'drawing', 'build', 'drawings/second.py');

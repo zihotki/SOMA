@@ -14,8 +14,6 @@ export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$
 export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /** Videos, die die App abspielt (E58). MOV meist nur, wenn H.264 darin steckt. */
 export const VIDEO_EXT = /\.(mp4|webm|m4v|mov)$/i;
-/** Datentyp beim Ziehen einer Datei ins Terminal (Wert: Pfad relativ zum Projekt). */
-export const DRAG_FILE = 'application/x-soma-file';
 
 /** Was der Baum vom Rest der App braucht. Die Aktionen liefern true, wenn das Namensfeld zugehen darf. */
 export interface FileTreeDeps {
@@ -27,7 +25,7 @@ export interface FileTreeDeps {
   openExternal(rel: string): void;
   /** Bild als Hintergrund der Markierung öffnen (E16). */
   mark(rel: string): void;
-  toAgent(rel: string): void;
+  comment(rel: string): void;
   copyPath(rel: string): void;
   /** Dateibaum zeigen und die Datei darin finden, mit `rename` gleich das Namensfeld öffnen (Menü aus anderen Panels). */
   showInTree(rel: string, rename: boolean): void;
@@ -133,7 +131,7 @@ export class FileTree {
     else if (!rest.length && !ed) rows.push(el('div', { className: 'hint', textContent: 'No files yet.' }));
     // Markierungen (E16) aus .soma/feedback/: eigene Gruppe, neueste zuerst. Zum Wiederfinden und erneut an den Agenten geben.
     if (feedback?.children?.length && group(FEEDBACK, 'image', 'Markups', feedback.children.length,
-      'Images from “Mark up”, stored in .soma/feedback/. Click to open for markup, right-click to send the path to the agent or open in an image viewer.', FEEDBACK)) {
+      'Images from “Mark up”, stored in .soma/feedback/. Click to open for markup, right-click to add a comment or open the image in another app.', FEEDBACK)) {
       walk(feedback.children, 1, FEEDBACK);
     }
     // Kopien der Skills (E17) aus .soma/skills/: zum Nachlesen, eingeklappt, weil es meist über ein Dutzend sind
@@ -310,7 +308,7 @@ export class FileTree {
     items.push(menuItem('Show in Explorer', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
     if (n) {
       items.push(el('div', { className: 'msep' }),
-        menuItem('Send path to agent', { icon: 'send', onClick: () => d.toAgent(n.path) }),
+        menuItem('Add comment', { icon: 'comment', onClick: () => d.comment(n.path) }),
         menuItem('Copy path', { icon: 'copy', onClick: () => d.copyPath(n.path) }));
     }
     items.push(el('div', { className: 'msep' }));
@@ -349,7 +347,6 @@ export class FileTree {
       b.title = n.path;
       b.dataset.path = n.path;
       b.addEventListener('click', () => this.toggle(n.path));
-      FileTree.draggable(b, n.path);
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
@@ -358,7 +355,6 @@ export class FileTree {
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
     if (n.path === this.active) b.classList.add('sel');
-    FileTree.draggable(b, n.path);
     return b;
   }
 
@@ -369,12 +365,6 @@ export class FileTree {
     // Neu geöffnete Datei: Ordner darüber aufklappen, damit man sieht, wo sie liegt
     if (rel && changed && this.openAncestors(rel)) { this.render(); return; }
     this.root.querySelectorAll<HTMLElement>('.frow[data-path]').forEach((r) => r.classList.toggle('sel', r.dataset.path === rel));
-  }
-
-  /** Ziehen ins Terminal fügt den Pfad ein wie „An Agent geben“ im Kontextmenü. */
-  private static draggable(b: HTMLElement, rel: string): void {
-    b.draggable = true;
-    b.addEventListener('dragstart', (e) => { e.dataTransfer?.setData(DRAG_FILE, rel); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'; });
   }
 
   private button(depth: number, chev: string | null, ico: string, name: string, tag: string, cls: string): HTMLButtonElement {

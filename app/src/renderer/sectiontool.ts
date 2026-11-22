@@ -81,7 +81,7 @@ export class SectionTool {
     window.addEventListener('keydown', (e) => {
       if (!this.picking || e.key !== 'Escape') return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.('#terminals, #code-view, .menu')) return;
+      if (t?.closest?.('#code-view, .menu')) return;
       e.preventDefault();
       e.stopPropagation();
       this.cancelPick();

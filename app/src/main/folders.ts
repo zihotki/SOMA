@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { SOMA_VERSION } from '../shared/version';
+import { APP_NAME, SOMA_VERSION } from '../shared/version';
 import { resolveInside } from './files';
 import { skillBackupsDir, skillDirs, templateDir, workspacesDir } from './paths';
 import { BEGIN as SKILLS_BEGIN, END as SKILLS_END, agentsEntries, applyDefaultSkills, isSkillId, usesSharedSkills, writeAgentsList, writeAtomic } from './skills';
@@ -39,7 +39,7 @@ help/
 
 const FOLDER_GIT = `## Version history (git)
 
-SOMA does not manage Git in this folder. If the folder is a repository, the app shows its commits as a timeline under the 3D view, but it does not commit or restore anything here.
+For a Git repository, CAD Lab Viewer shows the commits below the 3D view. Use Git to manage and restore versions.
 
 - Commit only when the user asks, and follow the conventions of this repository.
 - Do not rewrite history unless the user asks for it explicitly.
@@ -77,15 +77,15 @@ export function folderSection(entry: string, plain: boolean, skills?: string): s
   }
   const head = [
     FOLDER_BEGIN,
-    '# SOMA (written by the app, do not edit this section)',
+    `# ${APP_NAME}`,
     '',
-    'The SOMA app writes and replaces everything between the two `soma:folder` markers. The rest of this file belongs to the folder.',
+    'CAD Lab Viewer manages this section between the two `soma:folder` markers.',
     '',
-    `A person designs a 3D model with code in this folder, together with you. The model is written in Python with CadQuery, the entry point is \`${entry}\`. The SOMA app shows the result in a 3D viewer next to the terminal.`,
+    `The CadQuery entry point is \`${entry}\`. CAD Lab Viewer shows the model from this folder.`,
     '',
   ];
   if (plain) {
-    head.push(`\`${entry}\` is a plain CadQuery script (\`show_object\` or \`result\`). SOMA builds it in a compatibility mode. Keep its style and leave rules 1, 2 and 9 aside unless the user asks to switch to \`add_part\`.`, '');
+    head.push(`\`${entry}\` is a plain CadQuery script (\`show_object\` or \`result\`). The viewer builds it in compatibility mode. Keep its style and leave rules 1, 2 and 9 aside unless the user asks to switch to \`add_part\`.`, '');
   }
   return `${head.join('\n')}${body.trim()}\n${FOLDER_END}`;
 }
@@ -153,7 +153,7 @@ export function planFolder(dir: string, entry: string, createModel: boolean): Fo
   if (!isFullModel(dir)) {
     const agents = read(path.join(dir, 'AGENTS.md'));
     if (agents == null) create.push('AGENTS.md  instructions for the agent');
-    else if (!hasSection(agents)) change.push('AGENTS.md  adds a section for SOMA at the end');
+    else if (!hasSection(agents)) change.push('AGENTS.md  adds a section for CAD Lab Viewer at the end');
     const claude = read(path.join(dir, 'CLAUDE.md'));
     if (claude == null) create.push('CLAUDE.md  points Claude Code to AGENTS.md');
     else if (!hasClaudeRef(claude)) change.push('CLAUDE.md  adds a line that points to AGENTS.md');

@@ -206,10 +206,10 @@ export class ParamsPanel {
 
   /** Leerer Zustand (Entwurf 2, Bild 7): was Parameter sind und wie man zu ihnen kommt. */
   private empty(): HTMLElement {
-    const ask = el('button', { className: 'btn sm acc', title: 'Add a request to the agent’s input. Enter sends it.' }, icon('send', 14, 1.9), 'Ask the agent');
+    const ask = el('button', { className: 'btn sm acc', title: 'Add a comment about which model parameters you need' }, icon('comment', 14, 1.9), 'Add comment');
     ask.addEventListener('click', () => this.deps.insert('Make the main dimensions of the model adjustable with param(), so I can change them in the Parameters panel. '));
     return el('div', { className: 'pm-empty' }, el('span', { className: 'c3' }, icon('sliders', 22, 1.6)), el('b', { textContent: 'This model has no parameters yet' }),
-      el('span', { className: 'c2 small', textContent: 'Parameters are values of the model you can change here, such as a size, a count or an angle. The agent decides which ones, for example when you ask: “Make bore and stroke adjustable”.' }),
+      el('span', { className: 'c2 small', textContent: 'Edit values defined by param() in the model source. Add a comment to request an adjustable value.' }),
       ask);
   }
 
@@ -222,7 +222,7 @@ export class ParamsPanel {
     const after = l.after ?? p.default;
     const back = el('button', { className: 'btn sm', disabled: this.busy }, icon('undo', 14, 2), `Back to ${shownValue(p, l.before ?? p.default)}`);
     back.addEventListener('click', () => void this.commit(p, l.before));
-    const send = el('button', { className: 'btn sm acc', title: 'Add the parameter to the agent’s input. The error is in the card in the viewer.' }, icon('send', 14, 1.9), 'Send to agent');
+    const send = el('button', { className: 'btn sm acc', title: 'Add a comment about the failed parameter change' }, icon('comment', 14, 1.9), 'Add comment');
     send.addEventListener('click', () => this.deps.insert(`${paramNote(p, after, l.after !== null)}The build fails with this value. `));
     return el('div', { className: 'pm-fail' }, el('div', { className: 'pm-fail-t' }, icon('alert', 15, 2), el('span', { textContent: `The build failed after ${p.label} was set to ${shownValue(p, after)}.` })),
       el('div', { className: 'pm-acts' }, back, send));
@@ -276,7 +276,7 @@ export class ParamsPanel {
     return row;
   }
 
-  /** Aufgeklappt: Schieber, Erklärung, Wert im Code, Hinweise, Sprung in den Code und „Send to agent“. */
+  /** Aufgeklappt: Schieber, Erklärung, Wert im Code, Hinweise, Sprung in den Code und „Add comment“. */
   private details(p: ParamInfo, v: ParamValue, changed: boolean, out: boolean, bad: boolean): HTMLElement {
     const x = el('div', { className: 'x' });
     if ((p.kind === 'number' || p.kind === 'int') && p.min != null && p.max != null && p.max > p.min) x.append(this.slider(p, v as number));
@@ -289,7 +289,7 @@ export class ParamsPanel {
     if (bad) x.append(el('div', { className: 'pm-err small', textContent: `parameters.json holds ${JSON.stringify(this.st?.values[p.name])}, which does not fit this parameter. The value from the code applies.` }));
     const code = el('button', { className: 'lnk', title: 'Show the place in the code' }, icon('code', 13, 2), `${p.file}, line ${p.line}`);
     code.addEventListener('click', () => this.deps.openCode(p.file, p.line, p.label));
-    const send = el('button', { className: 'lnk', title: 'Add this parameter to the agent’s input' }, icon('send', 13, 2), 'Send to agent');
+    const send = el('button', { className: 'lnk', title: 'Add a comment about this parameter' }, icon('comment', 13, 2), 'Add comment');
     send.addEventListener('click', () => this.deps.insert(paramNote(p, v, changed)));
     x.append(el('div', { className: 'pm-links' }, code, el('span', { className: 'grow' }), send));
     return x;

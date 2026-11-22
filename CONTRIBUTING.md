@@ -1,7 +1,6 @@
 # Contributing
 
-Thanks for your interest in SOMA. Bug reports, ideas and pull requests are welcome. SOMA is maintained by one person in
-their spare time, so please expect a few days until an answer.
+Bug reports, ideas and pull requests for CAD Lab Viewer are welcome.
 
 ## Issues
 
@@ -10,7 +9,7 @@ their spare time, so please expect a few days until an answer.
   list.
 - **Experience with agents:** which agent and model you used, and where it struggled with CadQuery or the skills.
 
-Please use the [issue templates](https://github.com/Kai-Jungsthoefel/SOMA/issues/new/choose). Security problems go
+Please use the [issue templates](https://github.com/zihotki/SOMA/issues/new/choose). Security problems go
 through private reporting, see [SECURITY.md](SECURITY.md).
 
 ## Pull requests
@@ -20,11 +19,11 @@ through private reporting, see [SECURITY.md](SECURITY.md).
   instructions or the skills): open an issue first and describe what you want to change. This avoids work that cannot be
   merged.
 - One topic per pull request. Issues labeled
-  [good first issue](https://github.com/Kai-Jungsthoefel/SOMA/labels/good%20first%20issue) are a good place to start.
+  [good first issue](https://github.com/zihotki/SOMA/labels/good%20first%20issue) are a good place to start.
 
 ### Development setup
 
-Structure, commands and code principles are in [CLAUDE.md](CLAUDE.md), the instructions for agents working on SOMA.
+Structure, commands and code principles are in [CLAUDE.md](CLAUDE.md), the instructions for agents working on CAD Lab Viewer.
 They apply to people as well.
 
 ```
@@ -32,12 +31,12 @@ They apply to people as well.
 powershell -File python/scripts/setup_env.ps1
 
 # in app/
-npm install
+npm ci
+npx install-electron
 npm start
 ```
 
-Development is set up and tested on Windows. On macOS and Linux it may need adjustments. If you get it running there, a
-pull request that documents the steps is very welcome.
+See the [app setup guide](app/README.md) for direct source launch.
 
 ### Before you open a pull request
 

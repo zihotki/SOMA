@@ -1,11 +1,11 @@
 name: Bug report
-description: Something in SOMA does not work as it should
+description: Something in CAD Lab Viewer does not work as it should
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time. Security problems please not here, see [SECURITY.md](https://github.com/Kai-Jungsthoefel/SOMA/blob/main/SECURITY.md).
+        Thanks for taking the time. Security problems please not here, see [SECURITY.md](https://github.com/zihotki/SOMA/blob/main/SECURITY.md).
         Before sharing a model, screenshot or log, check that it contains nothing private.
   - type: textarea
     id: what
@@ -27,10 +27,10 @@ body:
     attributes:
       label: Area
       options:
-        - Installation or start
+        - Setup or start
         - Viewer, measuring, section, exploded view
         - Building a model (soma build, errors)
-        - Agent terminal
+        - Review comments
         - Saving, opening, versions
         - Analysis (FEM, overhang, wall thickness)
         - Animation or rendering
@@ -45,7 +45,7 @@ body:
     id: system
     attributes:
       label: System info
-      description: In SOMA open Settings > About and click "Copy system info", then paste it here. It contains the versions of SOMA, Python, CadQuery, Electron and your system.
+      description: In CAD Lab Viewer open Settings > About and click "Copy system info", then paste it here. It contains the versions of the viewer, Python, CadQuery, Electron and your system.
       render: text
     validations:
       required: true
@@ -59,7 +59,7 @@ body:
     id: logs
     attributes:
       label: Error messages or output
-      description: Build errors, terminal output or the text of an error dialog.
+      description: Build errors, CLI output or the text of an error dialog.
       render: text
   - type: textarea
     id: files

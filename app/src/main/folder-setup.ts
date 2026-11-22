@@ -15,7 +15,7 @@ export function projectFolder(picked: string): string {
     const rel = path.relative(b, a);
     return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
   };
-  if (inside(dir, profile) || inside(profile, dir)) throw new Error('This folder holds the app data of SOMA. Choose another folder.');
+  if (inside(dir, profile) || inside(profile, dir)) throw new Error('This folder holds the CAD Lab Viewer profile. Choose another folder.');
   return dir;
 }
 

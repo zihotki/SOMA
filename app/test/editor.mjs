@@ -223,15 +223,13 @@ try {
     && await ev(() => getComputedStyle(document.querySelector('#code-view .cm-editor')).display === 'none' && document.getElementById('code-mode').hidden), JSON.stringify(s.pdf)?.slice(0, 120));
   const px = await ev(() => { const c = document.querySelector('.pdf-page[data-page="1"] canvas'); const g = c.getContext('2d'); const d = g.getImageData(0, 0, c.width, c.height).data; let dark = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 100) dark++; return { w: c.width, dark }; });
   check('Seite 1 ist wirklich gezeichnet (Schrift auf weißem Grund)', px.w > 200 && px.dark > 50, JSON.stringify(px));
-  await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
   const selected = await ev(() => window.__t.editor.pdfSelect(1, 'Haltemoment 0,45 Nm'));
   await sleep(100);
-  const qb = await ev(() => { const b = [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Quote to agent/.test(x.textContent)); return b ? { on: !b.disabled, acc: b.classList.contains('acc') } : null; });
-  check('Text markiert: Knopf „Quote to agent“ oben aktiv und orange, kein schwebender Knopf am Text', selected && (await ed()).pdf.quote && qb?.on && qb.acc && !(await ev(() => document.querySelector('.pdf-float'))), JSON.stringify(qb));
-  await ev(() => [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Quote to agent/.test(x.textContent)).click());
-  await sleep(200);
-  check('Zitat geht mit Datei und Seite an den Agenten', await ev(() => window.__inserted) === '[Quote: docs/datenblatt.pdf p. 1: "Haltemoment 0,45 Nm"] ',
-    `${await ev(() => window.__inserted)} | ${(await ev(() => window.__t.toast())).text} | ${await ev(() => window.__t.terminals.count)}`);
+  const qb = await ev(() => { const b = [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Add comment/.test(x.textContent)); return b ? { on: !b.disabled, acc: b.classList.contains('acc') } : null; });
+  check('Text markiert: Knopf „Add comment“ oben aktiv und orange, kein schwebender Knopf am Text', selected && (await ed()).pdf.quote && qb?.on && qb.acc && !(await ev(() => document.querySelector('.pdf-float'))), JSON.stringify(qb));
+  await ev(() => [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Add comment/.test(x.textContent)).click());
+  const quoteReference = await app.reviewReference();
+  check('A quote comment names the file and page', quoteReference === '[Quote: docs/datenblatt.pdf p. 1: "Haltemoment 0,45 Nm"]', quoteReference);
   await ev(() => window.__t.editor.pdfMarkPage(2));
   await waitFor('Seite auf der Zeichenfläche', () => window.__t.markup().active, 10000).catch(() => {});
   const mk = await ev(() => window.__t.markup());

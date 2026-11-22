@@ -1,8 +1,7 @@
 # Instructions for the coding agent (managed by the app, do not edit)
 
 You are helping a person design a 3D model with code. The model is written in Python with CadQuery.
-The app shows the result in a 3D viewer next to this terminal. Notes and wishes of the user go into
-`NOTES.md` (read it first, it is yours and the user's to edit). This file is replaced by the app.
+Open the model in CAD Lab Viewer. Read `NOTES.md` for the project notes. The app manages these instructions.
 
 ## Project layout
 
@@ -34,12 +33,12 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 
 ## Commands
 
-Run them in this terminal. They work without the app.
+Run these commands from the project folder. Open the viewer on this project to make a still render.
 
 | Command | Purpose |
 |---|---|
 | `soma build` | Runs `model.py`, writes `output/model.step` and the viewer cache. **Run it after every change and read the result.** On errors it prints the file, line and message |
-| `soma export <Part> --format stl` | Exports one part (formats: step, stl, 3mf, amf, brep, iges, obj, vrml, glb, gltf, dxf, svg) |
+| `soma export <Part> --format stl --detail fine` | Exports one part (formats: step, stl, 3mf, amf, brep, iges, obj, vrml, glb, gltf, dxf, svg) |
 | `soma export --all --format step` | Exports all parts except references |
 | `soma export <Part> --format glb --detail coarse` | Mesh formats (stl, 3mf, amf, obj, glb, gltf) take `--units mm\|cm\|m\|in`, `--up z\|y`, `--detail coarse\|normal\|fine` or `--tolerance <mm>`. Default: glb/gltf in m with Y up (game engines, Blender), the others in mm with Z up |
 | `soma render` | Saves a picture of the current model to `renders/view-iso.png` (`--view top` or a direction `--view=1,-2,1`, `--hide`/`--only` parts or groups, `--fit` parts, `--zoom 2`, `--size 1280x800`, `--out`). **Open the picture and look at it** to check your work, also inside: hide what is in the way. Needs the app with this model open, it renders with the app's viewer |
@@ -52,7 +51,7 @@ If `soma build` fails, fix the error before doing anything else. Keep the model 
 
 ## Version history (git)
 
-This folder is a git repository, and the `git` on your PATH is the one the app uses. The app shows the commits as a timeline under the 3D view, so the user can look at earlier versions and restore them.
+The viewer shows Git commits below the 3D view.
 
 - After every meaningful iteration that **builds successfully** (`soma build` says "Build ok"), commit it: `git add -A`, then `git commit -m "<short description>"`. Write the message in the language the user speaks. Build first, so `output/model.step` in the commit matches the code.
 - Do not rewrite history: no `git reset`, `rebase`, `commit --amend` or `push --force`, no new branches, no `checkout` or `switch` to old commits. To go back to an earlier version, tell the user to open it in the timeline of the app and click "Restore".
@@ -60,25 +59,13 @@ This folder is a git repository, and the `git` on your PATH is the one the app u
 
 ## Environment
 
-- Use the `python` and `pip` on your PATH. They belong to this app and already have CadQuery, numpy, scipy and more.
-- If the model needs another package, run `pip install <package>`. It goes into this model's own environment, and `soma build` records it in `requirements.txt` (do not edit that file). Install only what the model really needs.
-- **Do not create virtual environments** (`.venv`, `venv`), and do not use `--user`, `uv` or another Python to install packages.
-- If pip refuses a package because it needs other versions of the app's libraries, pick another version or another package. The app's libraries stay as they are.
-- Do not move or rename `model.py`, and do not create your own STEP writer: the app relies on `soma build`.
+Use the CAD Lab wrapper for projects in CAD Lab. For a direct call, use the project's Python in `.soma/env` with `-m soma` or `-m pip`. A build records extra packages in `requirements.txt`. The viewer can initialize the project environment when it opens the folder.
 
 ## Feedback from the user
 
-The app pastes short notes into your input. The user adds their own words and sends them:
+Read all pending comments with `soma review list` when the user says they reviewed the model. The project log is `.soma/feedback/review.jsonl`. Each comment has an ID and a reference to the selected part, face, drawing item or other viewer context. References from an earlier build can require comparison with the current model. Open any PNG referenced by a markup comment.
 
-- `[Markup: .soma/feedback/markup-20260930-1405.png]`: a picture of the 3D view (or a blank sketch) with the user's drawings: arrows, circles, handwritten text, often with dimensions. **Open the image file and look at it**, compare it with the model, then change the code. If the note says `shows the older version <hash>`, the picture shows that older commit, not the current code (`git show <hash>:model.py`). Leave the images where they are.
-- `[Selection: part "…", model.py line …]`: the part the user clicked, with the lines of its `add_part` call and the clicked face.
-- `[Build error: …]`: the message of the last failed build.
-- `[Parameter: "Cylinder bore" (BORE) = 40 mm, set in the app, code default 38 mm, model.py line 12]`: a parameter from the Parameters panel, with the user's value if they set one.
-- `[Animation: "Name" (animations/x.py) at 1.50 s]`, `[Video: renders/x.mp4 at 00:03.20]`: a moment in an animation or a video. A markup can name it too (`drawn on renders/x.mp4 at 00:03.20`).
-- `[Result: "Wall thickness" (.soma/results/…), part "…": 0.80 mm at (x, y, z) mm]`: a spot in the colours of an analysis.
-- `[Skill: .soma/skills/<name>.md]`: the user points you to this rule set, switched it on or changed its settings (the note may list them, they are already written into the file). Read the file again now and follow it from here on. When the user switches a skill off, it disappears from the list below: stop applying it.
-
-The user can also edit files directly in the app's editor. Read a file again right before you change it, do not rely on an older copy.
+After you address and verify a comment, record it by ID with `soma review address <id>`. Leave other comments pending. Keep the earlier notes in the log.
 
 <!-- soma:skills -->
 ## Skills

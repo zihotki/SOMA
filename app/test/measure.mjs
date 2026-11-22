@@ -95,17 +95,11 @@ try {
     s.error || s.text.replace(/\s+/g, ' ').slice(0, 90));
   await shot('13-messen-bohrungen');
 
-  // 5) An den Agenten
-  const tid = await ev(() => window.__t.terminals.activeId);
-  await domClick('btn-measure-agent');
-  await waitFor('Messung im Terminal', (id) => window.__t.termText(id).includes('[Measurement:'), 10000, tid).catch(() => {});
-  const txt = await ev((id) => window.__t.termText(id), tid);
-  // Den genauen Text prüft das Werkzeug selbst: Im Terminal kann beim Zeilenumbruch der Darstellung ein Zeichen fehlen
-  const agentText = (await ms()).agentText ?? '';
-  check('„Send to agent": Text mit Bauteil, Elementen und Wert (Punkt als Dezimalzeichen), steht im Terminal',
-    agentText.startsWith('[Measurement: part "Platte" edge (circle) and part "Platte" edge (circle): Distance between centers 20.000 mm') && txt.includes('[Measurement: part'),
-    agentText.slice(0, 90));
-  await ev((id) => window.soma.term.write(id, '\x03'), tid);
+  await domClick('btn-measure-comment');
+  const measurementReference = await app.reviewReference();
+  check('The comment references both parts and the measured distance',
+    measurementReference.startsWith('[Measurement: part "Platte" edge (circle) and part "Platte" edge (circle): Distance between centers 20.000 mm'),
+    measurementReference);
 
   // 6) Verdeckte Kante: Die untere hintere Kante der Platte liegt hinter der Oberseite und darf nicht getroffen werden
   const hidden = await ev((pid) => window.__t.viewer.edgesOf(pid).find((e) => e.curve === 'LINE' && Math.abs(e.mid[2]) < 1e-3 && Math.abs(e.mid[1] - 15) < 1e-3), ids.Platte);

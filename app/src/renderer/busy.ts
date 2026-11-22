@@ -35,7 +35,7 @@ export class Busy {
     window.addEventListener('keydown', (e) => {
       if (this.root.hidden || e.key !== 'Escape' || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.('#terminals, #code-view, input, textarea, .menu')) return;
+      if (t?.closest?.('#code-view, input, textarea, .menu')) return;
       e.preventDefault();
       this.abort();
     }, true); // vor den Werkzeugen: Escape bricht das Laden ab, nicht mehr

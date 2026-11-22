@@ -64,7 +64,7 @@ export class VideoView {
     v.addEventListener('click', () => (v.paused ? void v.play().catch(() => {}) : v.pause()));
     v.addEventListener('error', () => { if (this.file) d.toast(`${this.file} can't be played (format?). Right-click it in the file tree: “Open with default app”.`, 'error'); });
     window.addEventListener('keydown', (e) => {
-      if (ui.root.hidden || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor, #terminals, #markup')) return;
+      if (ui.root.hidden || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor, #markup')) return;
       if (e.key === ' ') { e.preventDefault(); if (v.paused) void v.play().catch(() => {}); else v.pause(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); this.step(-1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); this.step(1); }

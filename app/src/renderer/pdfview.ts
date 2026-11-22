@@ -205,7 +205,7 @@ export class PdfView {
     this.bar = {
       page: el('span', { className: 'pdf-page-no c3' }),
       zoom: el('span', { className: 'pdf-zoom c3' }),
-      quote: btn('send', 'Send the selected text to the agent as a quote with its page', () => this.sendQuote(), 'Quote to agent'),
+      quote: btn('comment', 'Add a comment with the selected text and page number', () => this.sendQuote(), 'Add comment'),
       mark: btn('camera', 'Mark up this page as an image (for drawings and scanned pages)', () => void this.markPage(), 'Mark up page'),
       thumbs: btn('thumbs', 'Page thumbnails', () => this.toggleThumbs()),
       prev: btn('left', 'Previous page', () => this.go(this.currentPage() - 1)),

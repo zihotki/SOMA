@@ -267,10 +267,9 @@ try {
     s.orderText.includes('Stays in place: "Unterteil"') && s.orderText.includes('2. ') && s.orderText.includes('"Deckel" towards +Z')
     && s.orderText.includes('assembly of') && s.orderText.includes('3. "Stift" towards (0, -0.5, 0.866)') && s.orderText.includes('6. "Mutter" towards +Y'),
     s.orderText);
-  await domClick('btn-explode-agent');
-  await sleep(200);
-  const toast = await ev(() => window.__t.toast());
-  check('„Send the order to the agent" fügt sie in die Eingabe ein', toast.text.includes('Added to the input of'), toast.text);
+  await domClick('btn-explode-comment');
+  const orderReference = await app.reviewReference();
+  check('The comment references the disassembly order', orderReference.includes('6. "Mutter" towards +Y'), orderReference);
   // Der Schieber verlässt das Abspielen, die Anzeige folgt ihm: 0 % ist der Anfang, alles darüber das Ende
   await slide(0);
   s = await ex();

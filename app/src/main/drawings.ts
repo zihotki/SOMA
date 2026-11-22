@@ -72,7 +72,7 @@ export function readDrawingList(dir: string, building = false): DrawingList {
     if (!built) continue;
     const dxf = str(e.dxf);
     drawings.push({
-      id, name, file: file && src ? file : null, line: line(e.line), size: str(e.size, 40) ?? '', width, height, scale: str(e.scale, 40) ?? '',
+      id, name, build: str(e.build, 80) ?? undefined, file: file && src ? file : null, line: line(e.line), size: str(e.size, 40) ?? '', width, height, scale: str(e.scale, 40) ?? '',
       pdf, dxf: dxf && /^output\/drawings\/[^/]+\.dxf$/i.test(dxf) ? dxf : null,
       pageBox: vec(e.page_box, 4) ?? [0, 0, width, height],
       views: (Array.isArray(e.views) ? e.views : []).map(view).filter((x): x is DrawingView => !!x),

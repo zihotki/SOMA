@@ -13,6 +13,7 @@ import runpy
 import sys
 import time
 import types
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -740,7 +741,7 @@ def _entry(root, sheet, warnings, px):
                 pdf=rel(root / OUT_DIR / f"{sheet.id}.pdf"), dxf=rel(root / OUT_DIR / f"{sheet.id}.dxf"),
                 png=rel(root / CACHE_DIR / f"{sheet.id}.png"), png_size=list(px), views=views, dims=dims,
                 warnings=[dict(w, file=_rel(w["file"], root) if w.get("file") else None) for w in warnings],
-                built=time.time())
+                built=time.time(), build=f"drawing:{uuid.uuid4().hex}")
 
 
 def build_all(root, only=None, dpi=DPI):

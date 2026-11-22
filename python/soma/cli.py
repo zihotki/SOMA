@@ -41,38 +41,10 @@ def _print_build(res, as_json, seconds):
             print("Warning:", w, file=sys.stderr)
 
 
-def _foreign_shell_note(project):
-    """Hinweis, wenn `soma` in einem Arbeitsordner der App laeuft, aber nicht mit der Umgebung ihrer Terminals.
-
-    Manche Agenten (Codex) fuehren Befehle ueber einen Hintergrunddienst mit der Umgebung eines anderen Programms aus:
-    `soma` und `pip` fehlen dort im PATH oder sind fremde, `pip install` landete nicht in der Projektumgebung.
-    """
-    from .render import bridge_file
-    root = Path(project).resolve()
-    if bridge_file(root) is None:
-        return None  # kein Arbeitsordner der laufenden App
-    mine = os.environ.get("SOMA_PROJECT")
-    try:
-        if mine and Path(mine).resolve() == root:
-            return None
-    except OSError:
-        pass
-    py = Path(".soma", "env", "Scripts", "python.exe") if os.name == "nt" else Path(".soma", "env", "bin", "python")
-    if not (root / py).is_file():
-        py = Path(sys.executable)
-    note = (f"Note: this shell does not have the environment of the app's terminals. Run soma as `{py} -m soma ...` "
-            f"and install packages only with `{py} -m pip install ...`.")
-    skill = root / ".soma" / "skills" / "shell-environment.md"
-    return note + (" Details: .soma/skills/shell-environment.md" if skill.is_file() else "")
-
-
 def cmd_build(args):
     from . import build
     res = build.run_build(args.project)
     _print_build(res, args.json, time.perf_counter() - _STARTED)
-    note = None if args.json else _foreign_shell_note(args.project)
-    if note:
-        print(note)
     # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
     # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
     sys.stdout.flush()
@@ -463,6 +435,21 @@ def cmd_render(args):
     return 0
 
 
+def cmd_review(args):
+    from . import review
+    try:
+        if args.action == "list":
+            result = review.pending(args.project)
+        elif args.action == "add":
+            result = review.add(args.project, args.text, args.reference, args.build_id)
+        else:
+            result = review.address(args.project, args.ids)
+    except (OSError, ValueError) as error:
+        return _fail(f"Review ERROR: {error}")
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="soma", description="Helper tool of SOMA")
     ap.add_argument("--version", action="version", version=f"soma {__version__}")
@@ -553,6 +540,19 @@ def main(argv=None):
     r.add_argument("--json", action="store_true")
     r.set_defaults(func=cmd_render)
 
+    review = sub.add_parser("review", help="read and record project review comments")
+    actions = review.add_subparsers(dest="action", required=True)
+    for name in ("list", "add", "address"):
+        action = actions.add_parser(name)
+        action.add_argument("--project", default=".")
+        action.set_defaults(func=cmd_review)
+        if name == "add":
+            action.add_argument("--text", required=True)
+            action.add_argument("--reference", required=True)
+            action.add_argument("--build-id")
+        if name == "address":
+            action.add_argument("ids", nargs="+")
+
     s = sub.add_parser("serve", help="measuring service for the app (JSON lines on stdin/stdout)")
     s.set_defaults(func=cmd_serve)
 
@@ -570,7 +570,7 @@ def main(argv=None):
     x.set_defaults(func=cmd_dxfview)
 
     args = ap.parse_args(argv)
-    # Ausgabe immer UTF-8: Agenten ausserhalb des SOMA-Terminals (ohne PYTHONUTF8) lesen die Pipe als UTF-8, Python schriebe
+    # Ausgabe immer UTF-8: Externe Programme lesen die Pipe als UTF-8, Python schriebe
     # dort die ANSI-Codepage, und ° oder ² kaemen als "�" an. In der Windows-Konsole aendert das nichts (die schreibt UTF-16)
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -578,7 +578,7 @@ def main(argv=None):
         except (AttributeError, ValueError, OSError):
             pass
     # Zusatzpakete des Projekts (E67): soma laeuft mit dem Python der Basis, das Modell darf sie trotzdem importieren
-    if args.cmd != "env" and getattr(args, "project", None) is not None:
+    if args.cmd not in ("env", "review") and getattr(args, "project", None) is not None:
         from . import env
         env.activate(args.project)
     return args.func(args)

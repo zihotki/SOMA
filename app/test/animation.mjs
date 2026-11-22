@@ -115,8 +115,6 @@ try {
   const bridge = await ev(() => window.soma.test.bridge());
   const env = { ...process.env, ...bridge, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
   const soma = (args, opts = {}) => spawnSync(PY, ['-m', 'soma', ...args], { cwd: dir, env, encoding: 'utf8', timeout: 10 * 60 * 1000, ...opts });
-  const tid = await ev(() => window.__t.terminals.activeId);
-  const term = () => ev((id) => window.__t.termText(id), tid);
   check('Verbindung für soma render: Adresse auf 127.0.0.1 und Schlüssel', /^127\.0\.0\.1:\d+$/.test(bridge.SOMA_APP ?? '') && (bridge.SOMA_APP_TOKEN ?? '').length >= 32, bridge.SOMA_APP);
 
   // 1) Animationsdatei anlegen: Der Watcher baut sie, die Liste kennt sie
@@ -252,21 +250,16 @@ try {
 
   // 6) soma render: Fehler der Verbindung
   // Ohne die Umgebung der Terminals (Codex führt Befehle über einen Dienst mit fremder Umgebung aus): bridge.json in den App-Daten
-  const noEnv = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', SOMA_APP: '', SOMA_APP_TOKEN: '', SOMA_PROJECT: '' };
+  const noEnv = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', SOMA_USER_DATA: app.ud, SOMA_APP: '', SOMA_APP_TOKEN: '', SOMA_PROJECT: '' };
   let bj = null;
   try { bj = JSON.parse(fs.readFileSync(path.join(dir, '..', '..', 'bridge.json'), 'utf8')); } catch { /* fehlt */ }
-  check('bridge.json neben workspaces/: dieselbe Adresse und derselbe Schlüssel wie in den Terminals', bj?.app === bridge.SOMA_APP && bj?.token === bridge.SOMA_APP_TOKEN, JSON.stringify(bj));
+  check('bridge.json neben workspaces/: dieselbe Adresse und derselbe Schlüssel wie im Viewer', bj?.app === bridge.SOMA_APP && bj?.token === bridge.SOMA_APP_TOKEN, JSON.stringify(bj));
   r = soma(['render', '--size', '320x200', '--out', 'renders/ohne-umgebung.png'], { env: noEnv });
   check('Ohne die Umgebung der App: soma render findet die App über bridge.json', r.status === 0 && fs.existsSync(path.join(dir, 'renders', 'ohne-umgebung.png')), r.stdout + r.stderr);
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-ausserhalb-'));
   r = soma(['render', '--project', outside], { env: noEnv });
-  check('Ohne Umgebung und außerhalb der Arbeitsordner: verständliche Meldung', r.status === 1 && r.stderr.includes('needs the running app'), r.stderr);
+  check('Render requests for another project are rejected', r.status === 1 && r.stderr.includes('not the model that is open'), r.stderr);
   cleanup(outside);
-  r = soma(['build'], { env: noEnv });
-  check('soma build mit fremder Umgebung: Hinweis auf python -m soma, pip und den Skill', r.status === 0 && r.stdout.includes("does not have the environment of the app's terminals")
-    && r.stdout.includes('-m pip install') && r.stdout.includes('shell-environment.md'), r.stdout + r.stderr);
-  r = soma(['build'], { env: { ...env, SOMA_PROJECT: dir } });
-  check('soma build in der Umgebung der Terminals: kein Hinweis', r.status === 0 && !r.stdout.includes('Note:'), r.stdout + r.stderr);
   r = soma(['render'], { env: { ...env, SOMA_APP_TOKEN: 'x'.repeat(48) } });
   check('Falscher Schlüssel: abgelehnt', r.status === 1 && r.stderr.includes('Wrong key'), r.stderr);
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-anderes-'));
@@ -307,8 +300,8 @@ try {
   check('Video: MP4, Untertitel als WebVTT, Übersicht für den Agenten', r.status === 0 && head === 'ftyp' && vtt.startsWith('WEBVTT')
     && vtt.includes('00:00:01.000 --> 00:00:05.500') && vtt.includes('Der Deckel öffnet bis 110°') && r.stdout.includes('contact sheet (PNG)'),
     `${head} ${Date.now() - t0} ms ${r.stderr}`);
-  await waitFor('Hinweis im Fenster', () => window.__t.toast().text.includes('The agent created renders/deckel-oeffnen.mp4'), 5000).catch(() => {});
-  check('Das Fenster meldet, was der Agent erzeugt hat', (await ev(() => window.__t.toast())).text.includes('The agent created renders/deckel-oeffnen.mp4'));
+  await waitFor('Hinweis im Fenster', () => window.__t.toast().text.includes('Rendered renders/deckel-oeffnen.mp4'), 5000).catch(() => {});
+  check('The viewer reports the CLI render', (await ev(() => window.__t.toast())).text.includes('Rendered renders/deckel-oeffnen.mp4'));
 
   // 8) Video abspielen, Zeit und Standbild an den Agenten
   await ev(() => window.__t.showPanel('files'));
@@ -344,18 +337,17 @@ try {
     && !moreItems.some((x) => x.startsWith('New')), moreItems.join(','));
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await shot('video-1');
-  await domClick('btn-video-agent');
-  await waitFor('Zeit im Terminal', (id) => window.__t.termText(id).includes('[Video: renders/deckel-oeffnen.mp4 at 00:02.00]'), 8000, tid).catch(() => {});
-  check('„Zeit an Agent“: Datei und Zeitstempel in der Eingabe', (await term()).includes('[Video: renders/deckel-oeffnen.mp4 at 00:02.00]'), (await term()).slice(-200));
+  await domClick('btn-video-comment');
+  check('The video comment names the file and timestamp', await app.reviewReference() === '[Video: renders/deckel-oeffnen.mp4 at 00:02.00]');
   await domClick('btn-video-mark');
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 8000);
   const mk = await ev(() => window.__t.markup());
   check('„Markieren“: Standbild auf der Zeichenfläche, Quelle mit Zeitstempel', mk.source === 'renders/deckel-oeffnen.mp4 at 00:02.00', JSON.stringify(mk.source));
   await shot('video-2-markieren');
   await domClick('btn-mark-send');
-  await waitFor('Markierung im Terminal', (id) => window.__t.termText(id).includes('drawn on renders/deckel-oeffnen.mp4 at 00:02.00]'), 10000, tid).catch(() => {});
-  check('Markierung des Standbilds: Pfad des Bilds, Video und Zeit in der Eingabe', /\[Markup: \.soma\/feedback\/markup-[\d-]+\.png, drawn on renders\/deckel-oeffnen\.mp4 at 00:02\.00\]/.test(await term()),
-    (await term()).slice(-200));
+  const videoMarkupReference = await app.reviewReference();
+  check('The markup comment names the PNG, video and timestamp', /\[Markup: \.soma\/feedback\/markup-[\d-]+\.png, drawn on renders\/deckel-oeffnen\.mp4 at 00:02\.00\]/.test(videoMarkupReference),
+    videoMarkupReference);
   await domClick('btn-video-close');
   check('Schließen: Player weg', !(await ev(() => window.__t.video())).open);
 

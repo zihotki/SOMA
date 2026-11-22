@@ -7,7 +7,7 @@ const api: SomaApi = {
   startsHome: process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home',
   project: {
     current: () => ipcRenderer.invoke('project:current'),
-    create: (kind) => ipcRenderer.invoke('project:create', kind),
+    create: () => ipcRenderer.invoke('project:create'),
     list: () => ipcRenderer.invoke('project:list'),
     open: (id) => ipcRenderer.invoke('project:open', id),
     onChanged: (cb) => { ipcRenderer.on('project:changed', (_e, p) => cb(p)); },
@@ -22,7 +22,6 @@ const api: SomaApi = {
     exportCadQuery: () => ipcRenderer.invoke('project:exportCadQuery'),
     onSaveState: (cb) => { ipcRenderer.on('save:state', (_e, st) => cb(st)); },
     reveal: () => ipcRenderer.invoke('project:reveal'),
-    copyPath: () => ipcRenderer.invoke('project:copyPath'),
     setThumb: (dataUrl) => ipcRenderer.invoke('project:setThumb', dataUrl),
     thumb: (id) => ipcRenderer.invoke('project:thumb', id),
     remove: (id) => ipcRenderer.invoke('project:remove', id),
@@ -63,15 +62,10 @@ const api: SomaApi = {
     },
   },
   dxf: { view: (rel, known) => ipcRenderer.invoke('dxf:view', rel, known ?? null) },
-  term: {
-    create: (opts) => ipcRenderer.invoke('term:create', opts),
-    write: (id, data) => ipcRenderer.send('term:write', id, data),
-    resize: (id, cols, rows) => ipcRenderer.send('term:resize', id, cols, rows),
-    kill: (id) => ipcRenderer.send('term:kill', id),
-    onData: (cb) => { ipcRenderer.on('term:data', (_e, id, data) => cb(id, data)); },
-    onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
+  review: {
+    list: (projectId) => ipcRenderer.invoke('review:list', projectId),
+    add: (projectId, draft) => ipcRenderer.invoke('review:add', projectId, draft),
   },
-  agents: { detect: () => ipcRenderer.invoke('agents:detect') },
   measure: {
     query: (source, req) => ipcRenderer.invoke('measure:query', source, req),
     start: () => ipcRenderer.invoke('measure:start'),
@@ -119,9 +113,6 @@ const api: SomaApi = {
     info: () => ipcRenderer.invoke('about:info'),
     copy: () => ipcRenderer.invoke('about:copy'),
   },
-  updates: {
-    check: () => ipcRenderer.invoke('updates:check'),
-  },
   anim: {
     list: () => ipcRenderer.invoke('anim:list'),
     build: (file) => ipcRenderer.invoke('anim:build', file ?? null),
@@ -151,7 +142,6 @@ const api: SomaApi = {
     },
   },
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
-  copyText: (text) => ipcRenderer.invoke('app:copyText', text),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
     ? {

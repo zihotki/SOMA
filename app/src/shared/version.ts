@@ -1,6 +1,8 @@
 // Versionsnummer von SOMA (E68): Major.minor.bugfix, eine für App und soma. Sie steht in package.json und gleichlautend in
 // python/soma/__init__.py (test/unit.mjs prüft das). esbuild setzt sie beim Bauen ein (esbuild.config.mjs).
 
+export const APP_NAME = 'CAD Lab Viewer';
+
 declare const __SOMA_VERSION__: string | undefined;
 
 /** Ohne esbuild (etwa ein Modul im Test einzeln gebündelt) gibt es keine Nummer: 0.0.0 statt eines Absturzes. */

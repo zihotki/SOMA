@@ -22,7 +22,7 @@ interface Deps {
   pdf: PdfDeps;
   openCode(file: string, line: number | null, label: string): void;
   openFile(rel: string): void;
-  insert(text: string): void;
+  addComment(reference: string, buildId: string | null): void;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   link: Link;
   /** Exportieren mit Dateidialog (Meldung macht der Aufrufer). */
@@ -142,7 +142,7 @@ export class DrawingsView implements Pane {
     return el('div', { className: 'dw-empty' },
       el('span', { className: 'ic' }, icon('drawing', 30, 1.4)),
       el('b', { textContent: 'No drawings yet' }),
-      el('p', { textContent: 'Ask the agent for a technical drawing, for example “Make a drawing of the bracket with all dimensions for manufacturing.” It writes drawings/*.py and builds the sheets with soma drawing build. They appear here.' }));
+      el('p', { textContent: 'Create a drawing script under drawings/ and run soma drawing build.' }));
   }
 
   private renderBar(): void {
@@ -213,7 +213,7 @@ export class DrawingsView implements Pane {
       e.dxf ? btn('f-draw', `Open ${e.dxf}`, () => this.d.openFile(e.dxf!)) : null,
       ex,
       e.file ? btn('refresh', busy ? 'Building …' : `Build this sheet again (${e.file})`, () => void this.rebuild(e.file), busy) : null,
-      btn('send', 'Add this sheet and its warnings to the agent\'s input', () => this.d.insert(this.sheetNote(e))));
+      btn('comment', 'Add a comment about this sheet', () => this.d.addComment(this.sheetNote(e), e.build ?? 'drawing:unknown')));
     const kids: HTMLElement[] = [row];
     if (this.openWarn.has(key) && e.warnings.length) {
       kids.push(el('div', { className: 'dw-warns' }, ...e.warnings.map((w) => this.warnRow(e, w))));
@@ -421,18 +421,18 @@ export class DrawingsView implements Pane {
     if (s.hint) lines.push(el('div', { className: 'dw-cline' }, icon('info', 13, 2), el('span', { textContent: s.hint })));
     const code = el('button', { className: 'btn sm', title: file ? `Open ${where(file, line)}` : '', disabled: !file }, icon('code', 14, 1.9), 'Code');
     code.addEventListener('click', () => { if (file) this.d.openCode(file, line, title); });
-    const agent = el('button', { className: 'btn sm acc', title: 'Add this to the agent\'s input' }, icon('send', 14, 1.9), 'Send to agent');
-    agent.addEventListener('click', () => this.d.insert(this.hitNote(e, h)));
+    const comment = el('button', { className: 'btn sm acc' }, icon('comment', 14, 1.9), 'Add comment');
+    comment.addEventListener('click', () => this.d.addComment(this.hitNote(e, h), e.build ?? 'drawing:unknown'));
     const close = el('button', { className: 'ibtn s', title: 'Clear the selection (Escape)' }, icon('x', 14, 2));
     close.setAttribute('aria-label', 'Clear the selection');
     close.addEventListener('click', () => this.select(null));
     this.card.replaceChildren(
       el('div', { className: 'dw-chead' }, el('div', {}, el('div', { className: 't', textContent: title }), el('div', { className: 'm', textContent: `${e.name} · ${meta}` })), close),
       ...lines,
-      el('div', { className: 'dw-cacts' }, code, el('span', { className: 'grow' }), agent));
+      el('div', { className: 'dw-cacts' }, code, el('span', { className: 'grow' }), comment));
   }
 
-  // ---- Text für den Agenten ---------------------------------------------------------------------------------------
+  // ---- Review references ---------------------------------------------------------------------------------------
 
   private sheetNote(e: DrawingEntry): string {
     const warn = e.warnings.length ? `, ${plural(e.warnings.length, 'warning')}: ${e.warnings.map((w) => `${w.message}${w.line ? ` (line ${w.line})` : ''}`).join('; ')}` : '';
@@ -440,12 +440,13 @@ export class DrawingsView implements Pane {
   }
 
   private hitNote(e: DrawingEntry, h: Hit): string {
+    const stale = e.stale ? ', older than the code' : '';
     if (h.kind === 'view') {
       const v = h.v;
-      return `[Drawing "${e.name}", ${v.kind === 'view' ? 'view' : v.kind} "${v.name}" (${where(v.file ?? e.file, v.line)}), scale ${v.scale}] `;
+      return `[Drawing "${e.name}", ${v.kind === 'view' ? 'view' : v.kind} "${v.name}" (${where(v.file ?? e.file, v.line ?? e.line)}), scale ${v.scale}${stale}] `;
     }
     const d = h.d;
-    return `[Drawing "${e.name}", dimension ${d.label} in view "${d.view}" (${where(d.file ?? e.file, d.line)}), measured ${fmt(d.value)}${d.kind === 'angle' ? '°' : ' mm'}] `;
+    return `[Drawing "${e.name}", dimension ${d.label} in view "${d.view}" (${where(d.file ?? e.file, d.line ?? e.line)}), measured ${fmt(d.value)}${d.kind === 'angle' ? '°' : ' mm'}${stale}] `;
   }
 
   // ---- Prüfhilfen -------------------------------------------------------------------------------------------------

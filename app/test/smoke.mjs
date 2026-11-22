@@ -1,4 +1,4 @@
-// Smoke-Test der echten Electron-App: Projekt, Viewer, Terminal, Auto-Build, Fehlerfall, Projektwechsel.
+// Smoke-Test der echten Electron-App: Projekt, Viewer, Review, Auto-Build, Fehlerfall, Projektwechsel.
 // Aufruf: npm run test:smoke (baut vorher). SMOKE_VISIBLE=1 zeigt das Fenster und macht einen Screenshot.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,7 +32,7 @@ try {
   const appVersion = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8')).version;
   const versionUi = await ev(() => ({ start: document.getElementById('start-version').textContent, logo: document.getElementById('btn-home').title }));
   check('Version (E68): in project.json, auf der Startseite und am Logo', JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'project.json'), 'utf8')).app_version === appVersion
-    && versionUi.start === appVersion && versionUi.logo === `Start page · SOMA ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
+    && versionUi.start === appVersion && versionUi.logo === `Start page · CAD Lab Viewer ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
   check('Erster Build automatisch, 2 Bauteile im Strukturbaum', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
   const okStatus = await status();
@@ -55,7 +55,7 @@ try {
 
   await shot('1-arbeitsbereich');
 
-  check('Seitenleiste beim ersten Start zu, Code zu: Die Bauteile stehen im Baum im Viewer (E82)', JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":false,"agent":true}',
+  check('Seitenleiste beim ersten Start zu, Code zu: Die Bauteile stehen im Baum im Viewer (E82)', JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":false}',
     JSON.stringify(await ev(() => window.__t.layout())));
   const rail = await ev(() => [...document.querySelectorAll('#rail > *')].map((x) => (x.classList.contains('rail-sep') ? '|' : x.dataset?.panel ?? '')).filter(Boolean).join(' '));
   check('Leiste in drei Gruppen: Parameters, Files | Analysis, Animation | Skills, kein Reiter Parts', rail === 'params files | analysis anim | skills', rail);
@@ -72,7 +72,7 @@ try {
   await domClick('btn-sel-code');
   await waitFor('Code-Spalte', () => window.__t.codeText().includes('add_part("Lid"'), 10000).catch(() => {});
   check('„Code" in der Auswahlkarte zeigt model.py in der Code-Spalte, die Seitenleiste bleibt zu', (await ev(() => window.__t.codeText())).includes('add_part("Lid"')
-    && JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":true,"agent":true}');
+    && JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":true}');
   await shot('2-code');
   await ev(() => window.__t.showPanel('files'));
   await waitFor('Dateiliste', () => window.__t.fileRows().includes('model.py'), 10000).catch(() => {});
@@ -121,29 +121,11 @@ try {
   check('Dialog abgebrochen: nichts passiert', none.cancelled && !none.ok);
   cleanup(expDir);
 
-  // 3) Terminal: echte Shell im Projektordner, soma im PATH
-  const tid = await ev(() => window.__t.terminals.activeId);
-  check('Ein Terminal wurde automatisch geöffnet', await ev(() => window.__t.terminals.count) === 1);
-  // Ohne echten fetten Schnitt rechnet Chromium das Fett nach, runde Zeichen sitzen dann einen Pixel tiefer
-  check('Terminalschrift: fett ist der echte Schnitt 700, vor dem Terminal geladen', await ev((id) => window.__t.terminals.tabs.get(id).term.options.fontWeightBold === '700'
-    && [...document.fonts].some((f) => f.family.includes('IBM Plex Mono') && f.weight === '700' && f.status === 'loaded'), tid));
-  await ev((id) => window.soma.term.write(id, 'soma --version\r'), tid);
-  const gotVersion = await waitFor('soma --version im Terminal', (id) => /^soma \d/m.test(window.__t.termText(id)), 20000, tid).catch(() => false);
-  check('Im Terminal läuft `soma` (PATH der Basisumgebung)', !!gotVersion);
-  // pwd gibt es in PowerShell (Alias von Get-Location) und in den Shells von macOS und Linux
-  await ev((id) => window.soma.term.write(id, 'pwd\r'), tid);
-  await waitFor('pwd', (id) => window.__t.termText(id).includes('workspaces'), 20000, tid).catch(() => {});
-  check('Terminal startet im Projektordner', (await ev((id) => window.__t.termText(id), tid)).includes('workspaces'));
-  // Übergabe an den Agenten: Text landet in der Eingabezeile, abgeschickt wird nicht (E11)
-  await ev((t) => window.__t.insert(t), selText);
-  await waitFor('eingefügter Text', (id) => window.__t.termText(id).includes('[Selection: part "Lid"'), 10000, tid).catch(() => {});
-  const afterInsert = await ev((id) => window.__t.termText(id), tid);
-  check('„Send to agent" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Selection: part "Lid"') && !/Selection:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
-  check('Bestätigung „Added to the input of Terminal"', (await ev(() => window.__t.toast())).text.includes('Added to the input of Terminal'));
-  check('… und derselbe Text in der Zwischenablage (für Agenten-Apps außerhalb der App)', (await ev(() => window.soma.test.clipboard())) === selText);
-  await ev((id) => window.soma.term.write(id, '\x03'), tid); // Zeile verwerfen
+  await domClick('btn-sel-comment');
+  const selectionReference = await app.reviewReference();
+  check('A part comment contains the selected part and face', selectionReference === selText.trim(), selectionReference);
 
-  // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .soma/feedback/, Pfad in die Eingabe
+  // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .soma/feedback/, Pfad im Kommentar
   const dirtyBefore = (await ev(() => window.soma.project.saveState())).dirtyFiles;
   const lidPos = await ev((l) => { const v = window.__t.viewer, r = document.getElementById('viewer').getBoundingClientRect(), p = v.screenOf(l.id, l.face); return [p.x - r.left, p.y - r.top]; }, lidFace);
   await domClick('btn-mark');
@@ -286,22 +268,14 @@ try {
   const fbFiles = fs.existsSync(fbDir) ? fs.readdirSync(fbDir) : [];
   const png = fbFiles.length === 1 ? fs.readFileSync(path.join(fbDir, fbFiles[0])) : Buffer.alloc(0);
   if (process.env.SMOKE_SHOTS && png.length) fs.writeFileSync(path.join(APP, 'test', 'shots', '7b-markierung-bild.png'), png); // so sieht der Agent es
-  check('„Send to agent": PNG in .soma/feedback/, so groß wie der Viewer in Gerätepixeln', /^markup-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
+  check('Add comment saves the PNG in .soma/feedback/, so groß wie der Viewer in Gerätepixeln', /^markup-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
     && png.readUInt32BE(16) === px[0] && png.readUInt32BE(20) === px[1], `${fbFiles.join(',')} ${png.length > 24 ? `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}` : ''}`);
-  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markup: .soma/feedback/markup-'), 10000, tid).catch(() => {});
-  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markup: .soma/feedback/${fbFiles[0]}]`));
-  const tst = await ev(() => window.__t.toast());
-  check('Meldung nennt Datei und Ziel, die Werkzeuge sind zurück', tst.text.includes(`Markup saved: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('Added to the input of Terminal')
-    && await ev(() => getComputedStyle(document.getElementById('vtop')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
-  await ev((id) => window.soma.term.write(id, '\x03'), tid);
-  check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.soma.project.saveState())).dirtyFiles === dirtyBefore);
-  await domClick('btn-mark');
-  await waitFor('Zeichenfläche erneut', () => window.__t.markup().active, 5000).catch(() => {});
-  const again = await ev(() => window.__t.markup().active);
-  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-  check('Escape ohne Zeichnung schließt die Zeichenfläche, es entsteht keine Datei', again && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+  const markupReference = await app.reviewReference();
+  check('The comment includes the saved markup path', markupReference === `[Markup: .soma/feedback/${fbFiles[0]}]`, markupReference);
+  check('The viewer reports the saved markup', (await ev(() => window.__t.toast())).text.includes(`Markup saved: .soma/feedback/${fbFiles[0]}`));
+  check('Saving markup leaves the project clean', (await ev(() => window.soma.project.saveState())).dirtyFiles === dirtyBefore);
 
-  // Bauteile gehen über „Send to agent“ in der Auswahlkarte an den Agenten, die Zeilen des Baums lassen sich nicht mehr ziehen (E82)
+  // The structure tree supports part selection.
   await ev(() => window.__t.treeOpen(true));
   check('Zeilen des Strukturbaums sind nicht ziehbar, keine Übergabeleiste', await ev(() => [...document.querySelectorAll('#tree .tr-row')].every((r) => !r.draggable))
     && !(await ev(() => document.getElementById('handoff'))));
@@ -363,7 +337,7 @@ try {
   fs.rmSync(imgB);
   const modelMenu = await ctx('model.py');
   check('Menü auf model.py: kein „Mark up“ (kein Bild)', !modelMenu?.includes('Mark up'));
-  check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Open', 'Show in Explorer', 'Send path to agent', 'Copy path', 'New file', '-Rename', '-Delete'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
+  check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Open', 'Show in Explorer', 'Add comment', 'Copy path', 'New file', '-Rename', '-Delete'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await domClick('btn-file-new');
   await sleep(50);
@@ -402,10 +376,8 @@ try {
   await ev(() => document.getElementById('files-filter').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   const cleared = await ev(() => ({ value: document.getElementById('files-filter').value, rows: window.__t.fileRows() }));
   check('Escape: Suche leer, output/ wieder eingeklappt', cleared.value === '' && cleared.rows.includes('output') && !cleared.rows.includes('model.step') && cleared.rows.includes('Markups'), JSON.stringify(cleared.rows));
-  await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Send path to agent');
-  await waitFor('Pfad der Markierung im Terminal', (f) => window.__t.termText(f[0]).includes(`[File: .soma/feedback/${f[1]}]`), 5000, [tid, fbFiles[0]]).catch(() => {});
-  check('Markierung: Rechtsklick „Send path to agent“ fügt den Pfad ein', (await ev((id) => window.__t.termText(id), tid)).includes(`[File: .soma/feedback/${fbFiles[0]}]`));
-  await ev((id) => window.soma.term.write(id, '\x03'), tid);
+  await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Add comment');
+  check('A comment opened from the file menu names the markup path', await app.reviewReference() === `[File: .soma/feedback/${fbFiles[0]}]`);
   await shot('3b-dateien-menue');
   await ev(() => window.__t.showPanel(null));
 
@@ -427,7 +399,6 @@ try {
   check('Fehlertext für den Agenten nennt Datei und Zeile', /^\[Build error: model\.py line \d+: /.test(errText), errText.slice(0, 60));
   await shot('4-fehler');
   await sleep(300);
-  check('App reagiert weiter (Terminal aktiv, kein Absturz)', await ev(() => window.__t.terminals.count) === 1);
 
   // 6) Repariert -> wieder ok
   fs.writeFileSync(modelPy, original);
@@ -494,33 +465,14 @@ try {
   await shot('8-ansichtswuerfel');
   await ev(() => document.querySelector('#cube-view canvas').dispatchEvent(new PointerEvent('pointerleave', { bubbles: true })));
 
-  // 8) Neues Projekt: anderer Ordner, Terminals des alten sind zu, frischer erster Build
+  // 8) Neues Projekt: anderer Ordner, frischer erster Build
   await domClick('btn-new');
   await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id).catch(() => {});
   const p2 = await ev(() => window.__t.project());
   check('„Neu" legt ein zweites Projekt mit eigener UUID an', p2.id !== proj.id, p2.id.slice(0, 8));
-  await sleep(600);
-  check('Projektwechsel: genau ein frisches Terminal', await ev(() => window.__t.terminals.count) === 1);
-  // Die alte Shell meldet ihr Ende erst nach dem Wechsel. Das darf das neue Terminal nicht als beendet markieren,
-  // sonst lässt sich nichts mehr einfügen („Das Terminal ist beendet“), obwohl darin ein Agent läuft.
-  await sleep(2500);
-  await ev(() => window.__t.insert('[Test nach Wechsel] '));
-  const afterSwitch = await ev(() => window.__t.toast());
-  check('Nach dem Wechsel: Einfügen ins neue Terminal geht', !afterSwitch.error && afterSwitch.text.includes('Added to the input of Terminal'), afterSwitch.text.slice(0, 60));
-  await ev(() => window.soma.term.write(window.__t.terminals.activeId, '\x03'));
-  // Aktives Terminal beendet, ein anderes läuft noch: Der Text geht dorthin, und dieses kommt nach vorn
-  const firstTid = await ev(() => window.__t.terminals.activeId);
-  const secondTid = await ev(() => window.__t.terminals.add({ title: 'Zweites' }));
-  await sleep(1500);
-  await ev((id) => window.soma.term.write(id, 'exit\r'), secondTid);
-  await waitFor('zweites Terminal beendet', (id) => window.__t.termText(id).includes('Process ended'), 10000, secondTid).catch(() => {});
-  await ev(() => window.__t.insert('[Test Ersatzterminal] '));
-  const fallback = await ev(() => window.__t.toast());
-  await waitFor('Text im ersten Terminal', (id) => window.__t.termText(id).includes('[Test Ersatzterminal]'), 5000, firstTid).catch(() => {});
-  check('Aktives Terminal beendet: Text geht ins zuletzt benutzte laufende, das nach vorn kommt', !fallback.error && await ev(() => window.__t.terminals.activeId) === firstTid
-    && (await ev((id) => window.__t.termText(id), firstTid)).includes('[Test Ersatzterminal]'), fallback.text.slice(0, 60));
-  await ev((id) => window.soma.term.write(id, '\x03'), firstTid);
-  await ev((id) => window.__t.terminals.close(id), secondTid);
+  await domClick('btn-review');
+  await waitFor('The new project has no pending comments', () => document.querySelector('.review-dialog[open]')?.textContent.includes('No pending comments.'));
+  await ev(() => document.querySelector('.review-dialog[open] button').click());
   check('Beide Arbeitsordner existieren getrennt', fs.existsSync(proj.dir) && fs.existsSync(p2.dir) && proj.dir !== p2.dir);
 
   if (app.visible) { await sleep(500); await page.screenshot(path.join(APP, 'test', 'smoke.png')); }
@@ -528,9 +480,6 @@ try {
     await ev(() => window.__t.showStart(true));
     await shot('5-startseite');
     await ev(() => window.__t.showStart(false));
-    await ev(() => window.__t.setAgentCollapsed(true));
-    await shot('6-agent-eingeklappt');
-    await ev(() => window.__t.setAgentCollapsed(false));
   }
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));

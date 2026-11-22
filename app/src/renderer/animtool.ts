@@ -69,7 +69,7 @@ export class AnimTool {
     ui.texts.addEventListener('click', () => this.setTexts(!this.texts));
     ui.speed.addEventListener('change', () => { this.last = performance.now(); });
     window.addEventListener('keydown', (e) => {
-      if (!this.active || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor, #terminals')) return;
+      if (!this.active || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor')) return;
       // Liegt ein Video oder die Zeichenfläche darüber, gehört ihnen die Leertaste
       if (document.querySelector('#videoview:not([hidden]), #markup:not([hidden])')) return;
       if (e.key === ' ' && !e.ctrlKey) { e.preventDefault(); if (this.playing) this.pause(); else this.play(); }

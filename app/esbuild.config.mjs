@@ -8,9 +8,9 @@ const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'es2022', define: { __SOMA_VERSION__: JSON.stringify(version) } };
 await Promise.all([
   build({ ...common, entryPoints: ['src/cli/init.ts'], outfile: 'dist/main/init.js', platform: 'node', format: 'cjs',
-          external: ['electron', 'node-pty', 'dugite'] }),
+          external: ['electron', 'dugite'] }),
   build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main/main.js', platform: 'node', format: 'cjs',
-          external: ['electron', 'node-pty', 'dugite'] }),
+          external: ['electron', 'dugite'] }),
   build({ ...common, entryPoints: ['src/preload/preload.ts'], outfile: 'dist/preload/preload.js', platform: 'node', format: 'cjs',
           external: ['electron'] }),
   // Unsichtbares Render-Fenster für soma render (E58): eigener Preload und eigene Seite, derselbe Viewer
@@ -57,20 +57,12 @@ const collect = (name, from) => {
   for (const dep of Object.keys({ ...p.dependencies, ...p.optionalDependencies })) collect(dep, pkgDir);
 };
 for (const name of Object.keys(dependencies)) collect(name, appDir);
-// winpty liegt in node-pty unter deps/, das die Paketierung weglässt (electron-builder.config.cjs)
-const winpty = path.join('node_modules', 'node-pty', 'deps', 'winpty', 'LICENSE');
-if (fs.existsSync(winpty)) {
-  fs.mkdirSync('dist/licenses/node-pty__winpty', { recursive: true });
-  fs.copyFileSync(winpty, 'dist/licenses/node-pty__winpty/LICENSE');
-}
-
 fs.mkdirSync('dist/renderer', { recursive: true });
 fs.copyFileSync('src/renderer/index.html', 'dist/renderer/index.html');
 fs.copyFileSync('src/renderer/render.html', 'dist/renderer/render.html');
 fs.copyFileSync('src/renderer/style.css', 'dist/renderer/style.css');
 // App-Icon für den Ladebildschirm (index.html), der zeigt sich, bevor icons.ts geladen ist
 fs.copyFileSync('resources/icon.svg', 'dist/renderer/logo.svg');
-fs.copyFileSync(path.join('node_modules', '@xterm', 'xterm', 'css', 'xterm.css'), 'dist/renderer/xterm.css');
 
 // Daten von pdf.js (Apache 2.0): Zeichentabellen für asiatische Schriften, Ersatz für nicht eingebettete Standardschriften,
 // Decoder für JPEG 2000 und JBIG2. Ohne sie zeigt pdf.js manche Dateien nur unvollständig.

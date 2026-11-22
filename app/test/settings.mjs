@@ -252,7 +252,7 @@ try {
   const keys = await ev(() => document.getElementById('st-keys').textContent);
   check('Reiter Shortcuts: Tasten für Auswahl (H, I, T, Alt + Drag), Navigation nach der gewählten Mausbelegung', !(await ev(() => document.getElementById('st-keys').hidden))
     && keys.includes('Isolate: show only the selected parts') && keys.includes('Alt+DragBox select') && keys.includes('Shift+HShow all parts again')
-    && keys.includes('Navigation as set under Viewer (SolidWorks)') && keys.includes('middle dragRotate'), keys.slice(0, 300));
+    && keys.includes('Navigation preset (SolidWorks)') && keys.includes('middle dragRotate'), keys.slice(0, 300));
   await shot('settings-1b-shortcuts');
   await ev(() => window.__t.settingsShow('storage'));
   await waitFor('Speicherplatz berechnet', () => { const s = window.__t.settingsPages().storage; return !s.loading && !!s.stats; }, 30000);
@@ -295,41 +295,27 @@ try {
   await waitFor('Info gesammelt', () => { const a = window.__t.settingsPages().about; return !a.loading && !!a.info; }, 60000);
   const ab = (await pages()).about;
   const py = (n) => ab.info.python.packages.find((p) => p.name.toLowerCase() === n);
-  check(`About: SOMA ${VERSION}, soma gleiche Version, Python, CadQuery, OCP mit Version und Lizenz`, ab.info.version === VERSION && py('soma')?.version === VERSION
-    && !!ab.info.python.version && !!py('cadquery')?.version && !!py('cadquery')?.license && !!py('cadquery-ocp') && ab.text.includes(`SOMA ${VERSION}`) && ab.text.includes('CadQuery'),
+  check(`About: CAD Lab Viewer ${VERSION}, soma gleiche Version, Python, CadQuery, OCP mit Version und Lizenz`, ab.info.version === VERSION && py('soma')?.version === VERSION
+    && !!ab.info.python.version && !!py('cadquery')?.version && !!py('cadquery')?.license && !!py('cadquery-ocp') && ab.text.includes(`CAD Lab Viewer ${VERSION}`) && ab.text.includes('CadQuery'),
     `${py('soma')?.version} / ${py('cadquery')?.version} ${py('cadquery')?.license}`);
-  check('About: Komponenten der App aus components.json (three, xterm mit Lizenz), Electron, Git, vier Agenten geprüft',
-    ab.info.components.some((c) => c.name === 'three' && c.license === 'MIT') && ab.info.components.some((c) => c.name === '@xterm/xterm') && !!ab.info.electron && !!ab.info.git
-    && ab.info.agents.length === 4 && ab.text.includes('Claude Code'), `${ab.info.components.length} Komponenten, Git ${ab.info.git}`);
+  check('About shows application components, Electron and Git',
+    ab.info.components.some((c) => c.name === 'three' && c.license === 'MIT') && !!ab.info.electron && !!ab.info.git,
+    `${ab.info.components.length} components, Git ${ab.info.git}`);
   await shot('settings-4-about');
   await ev(() => document.querySelector('#st-about [data-act="copy"]').click());
   await waitFor('Kopiert', () => /System info copied/.test(window.__t.toast().text), 30000).catch(() => {});
   const clip = await ev(() => window.soma.test.clipboard());
   check('„Copy system info": Text mit Version, Python-Paketen, System und Ordnern (im Test nicht in der echten Zwischenablage)',
-    clip.startsWith(`SOMA ${VERSION}\n`) && clip.includes('CadQuery') && clip.includes('OS: ') && clip.includes('App data: '), clip.split('\n')[1]);
+    clip.startsWith(`CAD Lab Viewer ${VERSION}\n`) && clip.includes('CadQuery') && clip.includes('OS: ') && clip.includes('App data: '), clip.split('\n')[1]);
 
   // Protokoll (log.ts): Kopf beim Start, geöffnetes Modell, Build, gescheiterte Anfrage, Agentenstart per Knopf und getippt
   const logFile = path.join(ud, 'logs', 'soma.log');
-  const term = await ev(async () => {
-    // Startbefehl wie vom Knopf, nur mit einem Pfad, den es nicht gibt: Es startet nichts, die Shell meldet einen Fehler
-    const a = await window.soma.term.create({ command: 'soma-no-such-dir/claude --soma-test-nonexistent' });
-    const b = await window.soma.term.create({});
-    // Getippt mit Korrektur: „codexx“ + Rücktaste. Der Pfad existiert nicht, die Shell meldet nur einen Fehler
-    window.soma.term.write(b, 'soma-no-such-dir/codexx\x7f --x\r');
-    window.soma.term.write(b, 'echo gemini\r'); // kein Agentenstart: erstes Wort echo
-    return [a, b];
-  });
-  await sleep(1500);
-  await ev((ids) => ids.forEach((id) => window.soma.term.kill(id)), term);
   const logText = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
   check('Protokoll logs/soma.log: Kopf mit Version und System, Modell geöffnet, Build, gescheiterte Anfrage (unbekannter Ordner)',
     logText.includes('SOMA started') && logText.includes(`version: ${VERSION}`) && logText.includes('system: ') && /\[project\] opened [0-9a-f-]{36}/.test(logText)
     && /\[build\] ok, \d+ parts/.test(logText) && /WARN  \[storage:open\] Unknown folder/.test(logText), logText.slice(0, 200));
   check('Protokoll ohne ERROR (etwa Dateiliste ohne offenes Modell, „No project open“)', !/ ERROR /.test(logText),
     logText.split('\n').filter((l) => / ERROR /.test(l)).join(' | ').slice(0, 300));
-  check('Protokoll: Agent per Knopf und getippt erkannt (nur Name, keine Befehlszeile), echo gemini zählt nicht',
-    logText.includes('[agent] Claude Code started (start button)') && logText.includes('[agent] Codex started (typed in a terminal)') && !logText.includes('Gemini CLI started')
-    && !logText.includes('soma-test-nonexistent') && !logText.includes('soma-no-such-dir'));
   check('„Copy system info" mit Ordner Logs und dem Ende des Protokolls', clip.includes('Logs: ') && clip.includes('Recent log (logs/soma.log):') && clip.includes('SOMA started'));
   check('Storage: Bereich Logs mit dem Protokoll', (sp.stats.areas.find((a) => a.id === 'logs')?.bytes ?? 0) > 0);
   const link = await ev(() => { const b = [...document.querySelectorAll('#st-about button')].find((x) => x.textContent.includes('Changelog')); b.click(); return !!b; });
@@ -348,6 +334,7 @@ try {
 
   // ---- 9) Neustart mit denselben App-Daten ----------------------------------------------------------------------------------
   await app.stop();
+  fs.writeFileSync(settingsFile, JSON.stringify({ ...fileSettings(), start: { tutorialCard: false, updateCheck: true } }));
   app = await startApp({ name: 'settings2', userData: ud, port: await freePort() });
   ({ ev, waitFor, domClick, page } = app);
   await waitFor('Projekt nach Neustart', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() > 0, 90000);
@@ -355,7 +342,8 @@ try {
   cam = await vs();
   const disp = await ev(() => window.__t.display());
   check('Nach dem Neustart: SolidWorks, umgekehrter Zoom, orthografisch, ohne Kanten und transparent', cam.navigation === 'solidworks' && cam.zoomSpeed === -1
-    && cam.projection === 'orthographic' && disp.edges === false && disp.ghost === true, `${cam.navigation} ${cam.projection} ${JSON.stringify(disp)}`);
+    && cam.projection === 'orthographic' && disp.edges === false && disp.ghost === true
+    && !(await ev(() => window.__t.appSettings())).problem, `${cam.navigation} ${cam.projection} ${JSON.stringify(disp)}`);
   await app.stop();
 
   // ---- 10) Kaputte und fremde Werte in settings.json -------------------------------------------------------------------------

@@ -109,14 +109,13 @@ export class SkillsPanel {
     if (!r.ok) { this.deps.toast(`“${s.title}” could not be set to “${labelOf(mode)}”: ${r.error ?? 'unknown error'}`, 'error'); return; }
     const kept = r.backup ? ' The previous version in the project is in the backup.' : '';
     if (r.warning) { this.deps.toast(`“${s.title}” is set to “${labelOf(mode)}”. ${r.warning}${kept}`, 'error'); return; }
-    // Ein laufender Agent liest AGENTS.md nicht von selbst neu
     this.deps.toast(mode === 'always'
-      ? `“${s.title}” now always applies and is listed in AGENTS.md. “Send to agent” tells a running agent.${kept}`
+      ? `“${s.title}” now always applies and is listed in AGENTS.md.${kept}`
       : mode === 'demand'
         ? (was === 'always'
-          ? `“${s.title}” now only applies on demand. A running agent may keep following it: tell it.${kept}`
-          : `“${s.title}” is available to the agent on demand (AGENTS.md). A running agent only learns about it after a restart.${kept}`)
-        : `“${s.title}” is off. A running agent may still know the rules: tell it or restart it.${kept}`);
+          ? `“${s.title}” now only applies on demand.${kept}`
+          : `“${s.title}” is available to the agent on demand (AGENTS.md).${kept}`)
+        : `“${s.title}” is off.${kept}`);
   }
 
   private render(): void {
@@ -252,7 +251,7 @@ export class SkillsPanel {
       actions.append(edit);
     }
     if (s.mode !== 'off' && (s.file || s.shared)) {
-      const send = el('button', { className: 'btn sm acc', title: 'Add the path and customized settings to the agent’s input, so a running agent learns about them' }, icon('send', 14, 1.9), 'Send to agent');
+      const send = el('button', { className: 'btn sm acc', title: 'Add a comment about this skill and its settings' }, icon('comment', 14, 1.9), 'Add comment');
       send.addEventListener('click', () => this.deps.insert(skillNote(s)));
       actions.append(send);
     }
@@ -292,7 +291,7 @@ export class SkillsPanel {
     const kept = r.backup ? ' The previous version in the project is in the backup.' : '';
     if (now.shared) { this.deps.toast(`“${s.title}”: ${what(now)}.`); return; }
     this.deps.toast(`“${s.title}”: ${what(now)}. `
-      + (s.mode !== 'off' ? `Written to ${s.file}. “Send to agent” tells a running agent.${kept}` : 'Applies as soon as the skill is no longer off.'));
+      + (s.mode !== 'off' ? `Written to ${s.file}.${kept}` : 'Applies as soon as the skill is no longer off.'));
   }
 
   private setVar(s: SkillInfo, v: SkillVar, value: SkillValue | null): Promise<void> {

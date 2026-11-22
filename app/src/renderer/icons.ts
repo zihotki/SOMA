@@ -38,8 +38,9 @@ const PATHS: Record<string, string> = {
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   axes: '<path d="M6 18V4M6 18h14M6 18l7.5-7.5"/><path d="m3.5 6.5 2.5-2.5 2.5 2.5M17.5 15.5l2.5 2.5-2.5 2.5"/><circle cx="6" cy="18" r="1.4" fill="currentColor"/>', home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>', plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>', send: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  comment: '<path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 9h10M7 12h7"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
-  term: '<path d="m5 8 4 4-4 4M12 16h7"/>', panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
   // Seitenleiste links (Spalten-Schalter der Kopfzeile, Gegenstück zu panel für den Agenten)
   sidel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
   // Kategorien der Skills: Arbeitsweise (Weg mit Start und Ziel), Fertigung (Schraubenschlüssel), Konstruktionswissen (Zirkel)

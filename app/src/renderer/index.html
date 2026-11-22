@@ -3,17 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:">
-<title>SOMA</title>
-<link rel="stylesheet" href="xterm.css">
+<title>CAD Lab Viewer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <!-- Ladebildschirm: deckt die Oberfläche ab, bis main.js die Startseite (oder das Modell) aufgebaut hat. Ohne JS, daher das App-Icon als Bild (beim Build kopiert). -->
-<div id="boot" class="boot" role="status" aria-label="Loading"><img src="logo.svg" width="72" height="72" alt=""><b>SOMA</b><span class="boot-spin"></span></div>
+<div id="boot" class="boot" role="status" aria-label="Loading"><img src="logo.svg" width="72" height="72" alt=""><b>CAD Lab Viewer</b><span class="boot-spin"></span></div>
 <div id="app">
   <header id="topbar" class="top">
     <button id="btn-home" class="logo" title="Start page" aria-label="Start page"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></button>
-    <button id="btn-doc" class="docname" title="New, Open, Recent, Save as" aria-haspopup="menu" aria-expanded="false"><b id="doc-name">SOMA</b><i data-icon="down" data-size="14" data-stroke="2"></i></button>
+    <button id="btn-doc" class="docname" title="New, Open, Recent, Save as" aria-haspopup="menu" aria-expanded="false"><b id="doc-name">CAD Lab Viewer</b><i data-icon="down" data-size="14" data-stroke="2"></i></button>
     <span id="save-badge" class="savestate"></span>
     <button id="problems" class="warnbadge" hidden aria-haspopup="dialog" aria-expanded="false"></button>
     <span class="grow"></span>
@@ -30,7 +29,6 @@
     <div id="layout" class="layout" role="group" aria-label="Columns">
       <button id="btn-lay-side" aria-pressed="true" title="Show or hide the sidebar (Ctrl 1)" aria-label="Sidebar"><i data-icon="sidel" data-size="17" data-stroke="1.7"></i></button>
       <button id="btn-lay-code" aria-pressed="false" title="Show or hide the code (Ctrl 2)" aria-label="Code"><i data-icon="code" data-size="16" data-stroke="1.9"></i></button>
-      <button id="btn-lay-agent" aria-pressed="true" title="Expand or collapse the agent (Ctrl 3). Collapsed, it keeps running." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
     </div>
     <button id="btn-import" class="btn" title="Add files to inputs/ (STEP, images, drawings …). The agent can then use them. Dragging files or folders into the window does the same."><i data-icon="import" data-size="15"></i>Import</button>
     <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Export<i data-icon="down" data-size="13" data-stroke="2"></i></button>
@@ -47,7 +45,7 @@
       <button data-panel="analysis" aria-pressed="false" title="Analyses of the agent: strength (FEM), wall thickness, overhang, clearance. Shows the result in the viewer."><i data-icon="gauge" data-size="20" data-stroke="1.7"></i><span>Analysis</span><i id="nd-analysis" class="nd" hidden></i></button>
       <button data-panel="anim" aria-pressed="false" title="Animations and videos of the agent. Plays the animation in the viewer."><i data-icon="anim" data-size="20" data-stroke="1.7"></i><span>Animation</span><i id="nd-anim" class="nd" hidden></i></button>
       <!-- Zeichnungen (E76): keine Seitenleiste, öffnet das Dokument „Drawings“ in der Code-Spalte (drawings.ts) -->
-      <button id="btn-rail-drawings" aria-pressed="false" title="Technical drawings of the agent: all sheets in one view. Hover a view or a dimension to see it in 3D."><i data-icon="drawing" data-size="20" data-stroke="1.7"></i><span>Drawings</span><i id="nd-drawings" class="nd" hidden></i></button>
+      <button id="btn-rail-drawings" aria-pressed="false" title="Open the drawing sheets. Click a view or dimension to show it on the 3D model."><i data-icon="drawing" data-size="20" data-stroke="1.7"></i><span>Drawings</span><i id="nd-drawings" class="nd" hidden></i></button>
       <span class="rail-sep"></span>
       <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
@@ -92,7 +90,7 @@
             <div id="an-pick" class="cx-pick" hidden></div>
             <div class="cx-acts">
               <button id="btn-result-rerun" class="btn sm" title="Run the same analysis again on the current model"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Recalculate</button>
-              <button id="btn-result-agent" class="btn sm acc" title="Add the result and the clicked spot to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+              <button id="btn-result-comment" class="btn sm acc" title="Add a comment about this result"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button>
             </div>
           </div>
         </div>
@@ -112,7 +110,7 @@
           <div id="am-body" class="cx-scroll"></div>
           <div class="cx-foot"><div class="cx-acts">
             <button id="btn-anim-video" class="btn sm" title="Write a video (MP4) of this animation to renders/ and play it"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Make video</button>
-            <button id="btn-anim-agent" class="btn sm acc" title="Add the animation's name and the time to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+            <button id="btn-anim-comment" class="btn sm acc" title="Add a comment at this point in the animation"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button>
           </div></div>
         </div>
       </section>
@@ -167,7 +165,8 @@
             <button id="btn-section" aria-pressed="false" title="Section: cut the model open at a plane (normal to X, Y, Z or parallel to a face)"><i data-icon="section"></i><span class="lbl">Section</span></button>
             <button id="btn-explode" aria-pressed="false" title="Explode: pull the parts apart for display, standard parts along their axis"><i data-icon="explode"></i><span class="lbl">Explode</span></button>
             <span class="vsep"></span>
-            <button id="btn-mark" title="Mark up the viewer image and send it to the agent"><i data-icon="camera"></i><span class="lbl">Mark up</span></button>
+            <button id="btn-mark" title="Mark up the viewer image"><i data-icon="camera"></i><span class="lbl">Mark up</span></button>
+            <button id="btn-review" title="Show review comments" aria-label="Review comments" aria-haspopup="dialog"><i data-icon="comment"></i><span class="lbl">Review</span></button>
           </div>
           <span class="grow"></span>
           <span class="cubespace"></span>
@@ -194,7 +193,7 @@
           <div class="sc-actions">
             <button id="btn-sel-code" class="btn sm" title="Show the part's code location in the code"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code</button>
             <button id="btn-sel-export" class="btn sm" aria-haspopup="menu" aria-expanded="false" title="Export this part as a file: choose the format, then the location"><i data-icon="export" data-size="14" data-stroke="1.9"></i>Export</button>
-            <button id="btn-sel-agent" class="btn sm acc" title="Add part, file and lines to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+            <button id="btn-sel-comment" class="btn sm acc" title="Add a comment about the selection"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button>
           </div>
         </div>
 
@@ -204,7 +203,7 @@
           <div id="measure-body" class="mc-body"></div>
           <div class="sc-actions">
             <button id="btn-measure-again" class="btn sm" disabled>Measure again</button>
-            <button id="btn-measure-agent" class="btn sm acc" disabled title="Add the measurement to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+            <button id="btn-measure-comment" class="btn sm acc" disabled title="Add a comment about the measurement"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button>
           </div>
         </div>
 
@@ -225,7 +224,7 @@
             <button id="btn-explode-next" class="ibtn s" aria-label="Step forward" title="One step forward (disassemble)"><i data-icon="stepfwd" data-size="15"></i></button>
             <span id="explode-step" class="ex-step"></span>
             <select id="explode-speed" class="ex-speed" aria-label="Playback speed" title="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
-            <button id="btn-explode-agent" class="ibtn s" aria-label="Send the order to the agent" title="Add the disassembly order to the agent's input"><i data-icon="send" data-size="15"></i></button>
+            <button id="btn-explode-comment" class="ibtn s" aria-label="Add comment" title="Add a comment about the disassembly order"><i data-icon="comment" data-size="15"></i></button>
           </div>
           <div id="explode-names" class="ex-names" hidden></div>
           <div id="explode-hint" class="mc-hint" hidden></div>
@@ -303,7 +302,7 @@
             <div class="ec-actions"><span class="grow"></span>
               <button id="btn-err-details" class="btn sm" aria-expanded="false">Details</button>
               <button id="btn-err-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Open code</button>
-              <button id="btn-err-agent" class="btn sm acc" title="Add the error message to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button></div>
+              <button id="btn-err-comment" class="btn sm acc" title="Add a comment about the build error"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button></div>
           </div>
         </div>
         <div id="lastgood" class="float lastgood" hidden></div>
@@ -345,8 +344,8 @@
             <button id="btn-video-mute" class="ibtn" aria-label="Mute" title="Mute or unmute (M)"><i data-icon="volume" data-size="16" data-stroke="1.9"></i></button>
             <input id="video-volume" class="vv-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" title="Volume">
             <span class="vsep"></span>
-            <button id="btn-video-mark" class="btn sm" title="Mark up this frame on the canvas and send it to the agent with a timestamp"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Mark up</button>
-            <button id="btn-video-agent" class="btn sm acc" title="Add the file and timestamp to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Time to agent</button>
+            <button id="btn-video-mark" class="btn sm" title="Mark up this video frame"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Mark up</button>
+            <button id="btn-video-comment" class="btn sm acc" title="Add a comment at this point in the video"><i data-icon="comment" data-size="14" data-stroke="1.9"></i>Add comment</button>
             <button id="btn-video-more" class="ibtn" aria-label="File actions" title="Show in file tree or Explorer, rename, delete …" aria-haspopup="menu"><i data-icon="more" data-size="16"></i></button>
             <button id="btn-video-close" class="ibtn" aria-label="Close video" title="Close video (Escape)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
           </div>
@@ -378,7 +377,7 @@
           <div id="mark-hint" class="float mk-hint"></div>
           <div class="mk-actions">
             <button id="btn-mark-cancel" class="btn" title="Discard the drawing (Escape)">Cancel</button>
-            <button id="btn-mark-send" class="btn primary" title="Save as PNG in .soma/feedback/ and add the path to the agent's input"><i data-icon="send" data-size="15" data-stroke="2"></i>Send to agent</button>
+            <button id="btn-mark-send" class="btn primary" title="Save this image in .soma/feedback/ and add a comment"><i data-icon="comment" data-size="15" data-stroke="2"></i>Add comment</button>
           </div>
         </div>
       </section>
@@ -391,17 +390,6 @@
       </div>
     </main>
 
-    <div class="splitter" id="split-right"></div>
-    <aside id="terminals" class="agent" aria-label="Agent and terminals">
-      <div id="term-tabs" class="tabs">
-        <button id="btn-term-add" class="ibtn addtab" aria-haspopup="menu" aria-expanded="false" title="New tab: agent or terminal" aria-label="New tab: agent or terminal"><i data-icon="plus" data-size="15" data-stroke="2"></i><i data-icon="down" data-size="12" data-stroke="2"></i></button>
-      </div>
-      <div id="term-panes"></div>
-      <div id="agent-strip" class="strip" hidden>
-        <button id="btn-agent-expand" class="ibtn" title="Expand the agent area" aria-label="Expand the agent area"><i data-icon="panel"></i></button>
-        <div id="strip-tabs" class="strip-tabs"></div>
-      </div>
-    </aside>
   </div>
 
   <!-- Ladeanzeige über dem ganzen Fenster, solange ein CadQuery-Skript als neues Modell hereinkommt (E100) -->
@@ -420,7 +408,7 @@
     <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>New model</span><span class="k">Ctrl N</span></button>
     <button id="btn-new-cq" class="mi" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span>New from CadQuery script …</span></button>
     <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Open …</span><span class="k">Ctrl O</span></button>
-    <button id="btn-open-folder" class="mi" role="menuitem" title="Use SOMA in a folder of yours, for example a repository. SOMA says what it creates and changes there before it starts."><i data-icon="folder" data-size="15"></i><span>Open folder …</span></button>
+    <button id="btn-open-folder" class="mi" role="menuitem" title="Open a project folder or repository. Review any proposed file changes before opening the folder."><i data-icon="folder" data-size="15"></i><span>Open folder …</span></button>
     <div id="recent-wrap"><div class="msep"></div><div class="mh">RECENT</div><div id="recent-list"></div></div>
     <div class="msep"></div>
     <button id="btn-save-menu" class="mi" role="menuitem"><span class="noico"></span><span>Save</span><span class="k">Ctrl S</span></button>
@@ -435,7 +423,7 @@
     <div id="bm-warn" class="mnote warn" hidden></div>
     <div class="msep"></div>
     <label class="mi keep switchrow"><i data-icon="refresh" data-size="15"></i><span>Build automatically</span><input id="chk-auto" type="checkbox" class="switch" checked></label>
-    <div class="mnote indent">Turn off for large models. Then the button or the agent builds.</div>
+    <div class="mnote indent">For large models, turn off auto build and use Build now.</div>
     <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Build now</span><span class="k">Ctrl B</span></button>
   </div>
 
@@ -479,18 +467,10 @@
     <div class="mnote">One part: choose the location. All parts: choose a folder, each part becomes its own file. Reference and purchased parts are not included in “All parts”.</div>
     <div class="msep"></div>
     <div class="mh">WHOLE MODEL</div>
-    <button id="exp-zip" class="mi two" role="menuitem"><i data-icon="f-zip" data-size="15"></i><span class="t"><span>Everything as ZIP …</span><span class="sub">Code, results and history in one ZIP file, for example for someone without SOMA. The .soma file stays as it is.</span></span></button>
+    <button id="exp-zip" class="mi two" role="menuitem"><i data-icon="f-zip" data-size="15"></i><span class="t"><span>Everything as ZIP …</span><span class="sub">Code, results and history in one ZIP file, for example for someone without the viewer. The .soma file stays as it is.</span></span></button>
     <button id="exp-cq" class="mi two" role="menuitem"><i data-icon="f-py" data-size="15"></i><span class="t"><span>As CadQuery script …</span><span class="sub">Plain CadQuery for CQ-editor, VS Code and others, with parameters and standard parts. “New from CadQuery script” brings it back.</span></span></button>
   </div>
 
-  <div id="menu-agents" class="menu" role="menu" hidden>
-    <div class="mh">START AGENT</div>
-    <div id="agent-list"></div>
-    <div class="msep"></div>
-    <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Empty terminal</span></button>
-    <div class="msep"></div>
-    <button id="btn-copy-path" class="mi two" role="menuitem"><i data-icon="copy" data-size="15"></i><span class="t"><span>Copy path for agent app</span><span class="sub">For Claude Desktop, the Codex app and others: open this folder there. SOMA shows their changes.</span></span></button>
-  </div>
 
   <div id="menu-problems" class="menu wide" role="dialog" aria-label="Project issues" hidden>
     <div id="problem-list"></div>
@@ -536,10 +516,8 @@
 
   <div id="start" class="start" hidden>
     <!-- Startseite (Entwurf vom Oktober 2026): Zuletzt geöffnet ist der Hauptinhalt, Neu und Öffnen sitzen in der Titelzeile,
-         die großen Karten gibt es nur, solange es kein Modell gibt. Updates als Pille neben der Version -->
-    <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span>
-      <!-- Neue Version unter GitHub Releases (updates.ts). Inhalt baut main.ts, bei aktuellem Stand und ausgeschaltet (Settings › About) unsichtbar -->
-      <button id="start-update" class="uppill" hidden></button>
+         die großen Karten gibt es nur, solange es kein Modell gibt. -->
+    <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">CAD Lab Viewer</b><span id="start-version" class="c3 small"></span>
       <span class="grow"></span>
       <button id="btn-start-help" class="btn ghost" title="Help: how the app works (F1)"><i data-icon="help" data-size="15" data-stroke="1.7"></i>Help</button>
       <button id="btn-start-settings" class="btn ghost" title="Settings: viewer, skills, storage and version"><i data-icon="cog" data-size="15" data-stroke="1.7"></i>Settings</button>
@@ -553,18 +531,10 @@
             <span class="grow"></span>
             <button id="start-open" class="btn" title=".soma or ZIP file from this or another computer"><i data-icon="folder" data-size="15"></i>Open …<span class="kbd">Ctrl O</span></button>
             <div class="split">
-              <button id="start-new" class="btn primary" title="Template with an example part, plus a terminal in the model folder"><i data-icon="plus" data-size="15" data-stroke="2.4"></i>New model<span class="kbd">Ctrl N</span></button>
+              <button id="start-new" class="btn primary" title="Template with an example part"><i data-icon="plus" data-size="15" data-stroke="2.4"></i>New model<span class="kbd">Ctrl N</span></button>
               <button id="start-new-more" class="btn primary more" title="More ways to start a model" aria-label="More ways to start a model" aria-expanded="false"><i data-icon="down" data-size="13" data-stroke="2.4"></i></button>
             </div>
           </div>
-          <!-- Tutorial (E94): bis zum Kreuz (gespeichert in settings.json). Die Tour führt durch ein Beispielmodell, ohne Agent -->
-          <section id="start-tour" class="tour-intro" aria-label="Tutorial" hidden>
-            <span class="ico"><i data-icon="route" data-size="18" data-stroke="1.8"></i></span>
-            <div class="ti-text"><b>New to SOMA?</b> <span class="c2">A 9-minute video, or a short tour with an example model.</span></div>
-            <button id="btn-tour-video" class="btn sm" title="Video tutorial on YouTube (9 min), opens in your browser"><i data-icon="play" data-size="12" data-stroke="2"></i>Watch video</button>
-            <button id="btn-tour-start" class="btn sm primary">Start tutorial</button>
-            <button id="btn-tour-dismiss" class="ibtn" title="Hide this card. Help can start the tutorial at any time." aria-label="Hide the tutorial card"><i data-icon="x" data-size="14" data-stroke="2.2"></i></button>
-          </section>
           <div id="start-recent-wrap">
             <div class="start-bar">
               <span class="cap">RECENT</span><span id="start-recent-count" class="count"></span>
@@ -575,38 +545,19 @@
           </div>
           <!-- Ohne Modelle: zwei große Karten zeigen den Weg -->
           <div id="start-empty" class="start-empty" hidden>
-            <button id="start-empty-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="20" data-stroke="2.2"></i></span><b>Create your first model</b><span class="c2">Starts from a template with an example part and opens a terminal in the model folder.</span><span class="kbd">Ctrl N</span></button>
+            <button id="start-empty-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="20" data-stroke="2.2"></i></span><b>Create your first model</b><span class="c2">Starts from a template with an example part.</span><span class="kbd">Ctrl N</span></button>
             <button id="start-empty-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="20"></i></span><b>Open a model</b><span class="c2">A .soma or ZIP file from this or another computer. Code, result and history travel with it.</span><span class="kbd">Ctrl O</span></button>
             <div class="ehint">Already have a CadQuery script? <button id="start-empty-cq" class="lnk">Start a model from it …</button></div>
           </div>
-        </div>
-        <div class="start-side">
-          <section id="start-agents-card" class="panel-card">
-            <div class="ph"><b>Agents</b><span id="start-agents-count" class="c3 small"></span></div>
-            <div id="start-agents"></div>
-            <div class="ag-more" title="Any agent that runs in a terminal works. Start it in the terminal panel of a model.">… and any other CLI agent</div>
-            <!-- Sicherheitshinweis bis „Got it“ (localStorage), danach eine Zeile -->
-            <div id="start-note" class="ag-note">
-              <span class="note-ico"><i data-icon="shield" data-size="16"></i></span>
-              <div class="note-text"><span>The agent works with your user rights and can change files on this computer. Set permissions in the agent itself.</span>
-                <button id="btn-note-ok" class="btn sm">Got it</button></div>
-            </div>
-            <div id="start-note-line" class="ag-noteline" title="The agent works with your user rights and can read and change files on this computer. You set permissions and protection in the agent itself."><i data-icon="shield" data-size="13"></i>Agents work with your user rights</div>
-          </section>
-          <section id="start-tip" class="panel-card start-tip" hidden>
-            <b>You bring the agent</b>
-            <span class="c2">SOMA has no agent of its own. Install any CLI agent, then start it from the terminal panel of a model.</span>
-            <button id="btn-start-tip-help" class="lnk">How it works <i data-icon="send" data-size="12" data-stroke="2"></i></button>
-          </section>
         </div>
       </div>
     </div>
   </div>
 
   <div id="menu-start-new" class="menu" role="menu" hidden>
-    <button id="start-new-tpl" class="mi two" role="menuitem"><i data-icon="plus" data-size="15"></i><span class="t"><span>From template</span><span class="sub">Example part, terminal in the model folder</span></span><span class="k">Ctrl N</span></button>
+    <button id="start-new-tpl" class="mi two" role="menuitem"><i data-icon="plus" data-size="15"></i><span class="t"><span>From template</span><span class="sub">CadQuery example part</span></span><span class="k">Ctrl N</span></button>
     <button id="start-new-cq" class="mi two" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span class="t"><span>From CadQuery script …</span><span class="sub">The script stays as it is, the original is kept in inputs/</span></span></button>
-    <button id="start-open-folder" class="mi two" role="menuitem"><i data-icon="folder" data-size="15"></i><span class="t"><span>Open folder …</span><span class="sub">Use SOMA in a folder of yours, for example a repository</span></span></button>
+    <button id="start-open-folder" class="mi two" role="menuitem"><i data-icon="folder" data-size="15"></i><span class="t"><span>Open folder …</span><span class="sub">Open a project folder or repository</span></span></button>
   </div>
 
   <!-- Einstellungen (E78): Fenster über der App, zuerst die Bibliothek der Skills. Inhalt rechts baut settings.ts -->
@@ -647,9 +598,7 @@
   <!-- Hilfe (E83): die Anleitung aus dem Skill soma-app.md, links die Abschnitte. Inhalt baut help.ts -->
   <div id="help" class="st-scrim" hidden>
     <div class="st-dlg" role="dialog" aria-modal="true" aria-labelledby="help-title">
-      <header class="st-hd"><i data-icon="help" data-size="18" data-stroke="1.7"></i><b id="help-title">Help</b><span class="c3 small">How SOMA works. The agent knows this guide too: just ask it.</span><span class="grow"></span>
-        <button id="btn-help-video" class="btn sm" title="Video tutorial on YouTube (9 min), opens in your browser"><i data-icon="play" data-size="12" data-stroke="2"></i>Watch video</button>
-        <button id="btn-help-tour" class="btn sm acc" title="A short guided tour with an example model"><i data-icon="route" data-size="14" data-stroke="1.9"></i>Start tutorial</button>
+      <header class="st-hd"><i data-icon="help" data-size="18" data-stroke="1.7"></i><b id="help-title">Help</b><span class="c3 small">CAD Lab Viewer guide</span><span class="grow"></span>
         <button id="btn-help-close" class="ibtn" aria-label="Close help" title="Close (Escape)"><i data-icon="x" data-size="16" data-stroke="2"></i></button></header>
       <div class="st-body">
         <nav id="help-nav" class="st-nav help-nav" aria-label="Help"></nav>

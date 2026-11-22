@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-Instructions for Claude Code when developing SOMA (*Solid Object Modeling with Agents*). Not to be confused with `app/resources/template/CLAUDE.md`, the template for user projects.
+Instructions for Claude Code when developing CAD Lab Viewer. Not to be confused with `app/resources/template/CLAUDE.md`, the template for user projects.
 
 ## What it is about
 
-A desktop app (Electron, TypeScript) in which a user designs 3D models in CadQuery together with a CLI agent of their choice (Claude Code, OpenCode …). We do **not build our own harness**. The app provides the terminal, 3D viewer, the project format `.soma` (a ZIP with Git, E79) and the Python helper library `soma`.
+An Electron and TypeScript viewer for CadQuery models and drawings. The app uses the `.soma` project format and the Python helper library `soma`. Review comments are stored in the project.
 
 ### Working documents (local only, E88)
 
@@ -19,20 +19,19 @@ A desktop app (Electron, TypeScript) in which a user designs 3D models in CadQue
 Details in `app/README.md`.
 
 **`app/`** Electron app
-- `src/main/` main process. Projects: `projects.ts` (save, open, history, export), `git.ts`, `zip.ts`, `workspace.ts`, `folders.ts` ("Open folder", a folder of the user as the model, E103), `files.ts`, `watcher.ts`. Building and display: `build.ts` (prewarmed Python process), `previews.ts` (previews of versions and STEP files from the project), `measure.ts`, `dxf.ts` (E80), `drawings.ts` (document "Drawings", E97), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Agent and skills: `terminals.ts`, `agents.ts`, `skills.ts`, `skilllibrary.ts` (own skills, E78). Environment: `packages.ts` (project environment, E67), `params.ts` (parameter panel, E74). App: `log.ts` (log file `logs/soma.log` in the app data, also catches `console.*`), `settings.ts`, `storage.ts`, `about.ts` (E81), `updates.ts` (new version on GitHub, E98), `help.ts` (E83), `dialogs.ts`.
+- `src/main/` main process. Projects: `projects.ts` (save, open, history, export), `git.ts`, `zip.ts`, `workspace.ts`, `folders.ts` ("Open folder", a folder of the user as the model, E103), `files.ts`, `watcher.ts`. Building and display: `build.ts` (prewarmed Python process), `previews.ts` (previews of versions and STEP files from the project), `measure.ts`, `dxf.ts` (E80), `drawings.ts` (document "Drawings", E97), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Review and skills: `review.ts`, `skills.ts`, `skilllibrary.ts` (own skills, E78). Environment: `packages.ts` (project environment, E67), `params.ts` (parameter panel, E74). App: `log.ts` (log file `logs/soma.log` in the app data, also catches `console.*`), `settings.ts`, `storage.ts`, `about.ts` (E81), `help.ts` (E83), `dialogs.ts`.
 - `src/preload/` the only bridge to the renderer.
-- `src/renderer/` interface, wired up in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (structure tree, E82), tools `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `drawings.ts` + `drawlink.ts` (document "Drawings" and its link to 3D, E97), `markdown.ts`, `filetree.ts`, `versions.ts`, `fileview.ts` (STEP file from the project in the viewer), `terminals.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`, `tutorial.ts` (guided tour, E94). Animation and analysis: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render window: `render.ts`/`render.html`. General: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
+- `src/renderer/` interface, wired up in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (structure tree, E82), tools `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `drawings.ts` + `drawlink.ts` (document "Drawings" and its link to 3D, E97), `markdown.ts`, `filetree.ts`, `versions.ts`, `fileview.ts` (STEP file from the project in the viewer), `review.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`. Animation and analysis: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render window: `render.ts`/`render.html`. General: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
 - `src/shared/` `types.ts` (IPC contract), `settings.ts` (defaults, validation, mouse bindings, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
 - `resources/` `template/` (template for user projects incl. `AGENTS.md`), `skills/` (bundled skills, among them `soma-app.md` as the user guide for help and agent, E83), `help/` (images of the guide), `icon.*` (generated with `scripts/make-icon.py`).
-- `test/` test suites, CDP client, screenshots. `SOMA_TEST_EXE` runs them against a packaged app.
-- `electron-builder.config.cjs` installation packages, `build-resources/` large icon for them. CI for all three systems in `.github/workflows/dist.yml`, checks for pull requests and pushes in `checks.yml`.
+- `test/` test suites, CDP client, screenshots.
 
 **`python/soma/`** helper library and CLI
 - API: `add_part` (with `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly` (STEP files without an assembly via `stepimport.py`), standard parts in `fasteners.py` (dimension tables from bd_warehouse in `data/fasteners/`). Plain CadQuery scripts (E100): compatibility mode for `show_object`, `ocp_vscode` and `result` in `cqcompat.py`.
 - Mesh exports (3MF, AMF, STL, OBJ, GLB, GLTF): `meshexport.py`, one closed mesh per body with shared vertices (slicers need it), options for units, up axis and detail (game engines, glTF defaults to m and Y up). Mesh files from the project in the viewer: `meshview.py` (readers for STL, 3MF, AMF, OBJ, via `soma glb`).
 - CadQuery in and out (E100): `soma cadquery export|import` (`cqexport.py`), the block in exported scripts comes from `cqruntime.py`. `cqruntime.py` and `fasteners.py` are also under Apache 2.0 (E101), they must run without soma.
 - CLI: `soma build`, `export`, `glb`, `serve` (measuring service, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX via `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (only via the app), `env` (`env.py`, `.soma/env` and `requirements.txt`, E67).
-- `python/scripts/`: `setup_env.ps1` (development environment from `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (standalone base environment for the installation packages).
+- `python/scripts/`: `setup_env.ps1` (development environment from `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX).
 
 **`design/`** UI drafts, local only (in `.gitignore`, in the Git history up to `v0.8.0`), open in a browser, arrow keys to page
 - `startseite-entwurf.html` (implemented): start page with Recent first, New model and Open next to the title, compact agents, update label next to the version.
@@ -59,7 +58,6 @@ npm run test:all                     # all suites including the slow animation a
 node test/run-all.mjs smoke editor   # single suites in parallel, after npm run build
 npm run test:unit                    # without build, checks the version number among other things
 npm run help:shots                   # regenerate the images of the user guide
-npm run dist                         # installation package for this system, run build_runtime.py first (app/README.md)
 
 # soma directly
 "$LOCALAPPDATA/soma-dev/venv/Scripts/soma.exe" build --project <folder>
@@ -93,7 +91,7 @@ npm run dist                         # installation package for this system, run
 
 - After changes run `npm run typecheck` and `npm test`. Also run `node test/run-all.mjs animation fem` (after `npm run build`) when animations, analysis, FEM, the render window or their Python side change, and `npm run test:all` before a version bump. The npm scripts build first, `node test/*.mjs` without a build tests stale `dist/` files.
 - The suites start the real app. Windows stay invisible (`SOMA_HIDDEN=1`), otherwise they flash up for the user. Invisible windows do not repaint: for screenshots use `SMOKE_VISIBLE=offscreen`, for UI changes also `SMOKE_SHOTS=1`, and look at the images in `app/test/shots/`.
-- **User guide (E83):** when the interface changes, run `npm run help:shots`, look at the images in `app/resources/help/` and update `app/resources/skills/soma-app.md`. Crops and numbers are in `app/test/helpshots-spec.mjs`, the labels there and under the images must match.
+- **User guide (E83):** when the interface changes, check the screenshot in `app/resources/help/` and update `app/resources/skills/soma-app.md`.
 - Answer native dialogs via `app.answers([...])` (`src/main/dialogs.ts`).
 - Control via our own CDP client (`test/cdp.mjs`). puppeteer-core does not work with Electron 44 (`Input.dispatchMouseEvent` and `Page.captureScreenshot` hang in invisible windows).
 - Redirect long runs to a file instead of piping through `grep` (buffering hides hangs).

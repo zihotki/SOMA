@@ -5,15 +5,8 @@ import path from 'node:path';
 import { userDataDir } from './paths';
 
 /**
- * Verbindung von `soma` im Terminal zur App (E58), etwa für `soma render`: ein HTTP-Dienst nur auf 127.0.0.1, mit einem
- * zufälligen Port und einem Schlüssel je App-Start. Beides bekommen nur die Terminals der App als Umgebungsvariablen
- * (SOMA_APP, SOMA_APP_TOKEN). Andere Programme kennen den Schlüssel nicht, Anfragen ohne ihn werden abgelehnt.
- *
- * Manche Agenten führen ihre Befehle nicht in der Shell aus, in der sie gestartet wurden: Codex etwa über einen
- * Hintergrunddienst, der die Umgebung des Programms behält, aus dem er zuerst gestartet wurde (z. B. VS Code), und
- * Variablen mit TOKEN im Namen filtert Codex ohnehin heraus. Deshalb stehen beide zusätzlich in `bridge.json` in den
- * App-Daten, neben `workspaces/`: `soma` findet die Datei vom Arbeitsordner aus. Nie im Projekt, so kann der Schlüssel
- * weder in Git noch in die Modelldatei geraten.
+ * Local HTTP connection for the render CLI. Each viewer writes its address and
+ * token to bridge.json in its profile. The file stays outside the project.
  */
 export type BridgeHandler = (route: string, body: unknown) => Promise<{ status: number; body: unknown }>;
 
@@ -23,7 +16,7 @@ let server: http.Server | null = null;
 let port = 0;
 const token = crypto.randomBytes(24).toString('hex');
 
-/** Startet den Dienst (einmal je App). Scheitert er, laufen die Terminals ohne SOMA_APP, `soma render` erklärt das dann. */
+/** Start the bridge once for this viewer. */
 export function startBridge(handler: BridgeHandler): Promise<void> {
   if (server) return Promise.resolve();
   return new Promise((resolve) => {
@@ -60,7 +53,7 @@ function removeBridgeFile(): void {
   } catch { /* keine Datei oder unlesbar: nichts zu tun */ }
 }
 
-/** Umgebungsvariablen für Terminals: Adresse und Schlüssel, leer ohne laufenden Dienst. */
+/** Connection details for tests and clients that use environment credentials. */
 export function bridgeEnv(): Record<string, string> {
   return port ? { SOMA_APP: `127.0.0.1:${port}`, SOMA_APP_TOKEN: token } : {};
 }
@@ -75,7 +68,7 @@ async function serve(req: http.IncomingMessage, res: http.ServerResponse, handle
   try {
     const given = String(req.headers['x-soma-token'] ?? '');
     const ok = given.length === token.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token));
-    if (!ok) { reply(res, 403, { ok: false, error: 'Wrong key. Only the terminals of the app may talk to the app.' }); return; }
+    if (!ok) { reply(res, 403, { ok: false, error: 'Wrong key for the CAD Lab Viewer render connection.' }); return; }
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/')) { reply(res, 404, { ok: false, error: 'Unknown request' }); return; }
     const chunks: Buffer[] = [];
     let size = 0;

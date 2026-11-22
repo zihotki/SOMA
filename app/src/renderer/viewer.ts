@@ -271,8 +271,9 @@ export class Viewer {
   // ---- Laden ----------------------------------------------------------------------------------------------------
 
   /** Ersetzt das Modell. Kamera, Sichtbarkeit und Auswahl bleiben erhalten, damit ein Rebuild nicht stört. */
-  async load(glb: ArrayBuffer): Promise<void> {
+  async load(glb: ArrayBuffer, isCurrent = () => true): Promise<void> {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
+    if (!isCurrent()) return;
     const fresh = new Map<string, PartEntry>();
     gltf.scene.traverse((o) => {
       const meta = (o.userData as { soma?: PartMeta }).soma;

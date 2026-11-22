@@ -93,7 +93,7 @@ export class MeasureTool {
     window.addEventListener('keydown', (e) => {
       if (!this.active || e.key !== 'Escape' || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.('#terminals, #code-view, input, textarea, .menu')) return;
+      if (t?.closest?.('#code-view, input, textarea, .menu')) return;
       e.preventDefault();
       // Erst die Messung verwerfen, beim zweiten Mal den Modus verlassen
       if (this.a) this.reset(); else this.setActive(false);
@@ -211,7 +211,7 @@ export class MeasureTool {
       // Der Viewer zeigt einen älteren Build als den auf der Platte: Ohne Nachladen bliebe jeder weitere Klick genauso veraltet
       this.a = this.b = null;
       this.deps.viewer.setMeasureMarks(null);
-      this.note = 'The model was rebuilt outside the app (for example by the agent). The new version is loaded now, please click again.';
+      this.note = 'The model was rebuilt. Click again to measure the new version.';
       this.deps.reload();
     } else {
       this.error = r.error ?? 'The measurement failed.';

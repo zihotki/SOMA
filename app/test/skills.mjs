@@ -94,33 +94,32 @@ try {
     && DEMAND_NEW.split(',').every((id) => demand().includes(`.soma/skills/${id}.md`))
     && (await g('ls-files', '.soma/skills')).split('\n').length === 21
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, `${String((await ev(() => window.__t.saveState())).dirtyFiles)} | ${String(block()).slice(0, 200)}`);
-  // Anleitung (E83): Skill „Using the app“ bei Bedarf, Bilder in .soma/help/ (nicht im Verlauf), Hilfe-Fenster aus derselben Quelle
-  const helpPngs = fs.readdirSync(path.join(APP, 'resources', 'help')).filter((n) => n.endsWith('.png'));
   const helpCopy = read('.soma/skills/soma-app.md') ?? '';
-  check('Anleitung als Skill: Kopie mit Bildpfaden ../help/, alle Bilder in .soma/help/, nicht in Git, nichts ungespeichert',
-    helpCopy.includes('](../help/window.png)') && helpCopy.includes('For the agent') && helpPngs.length >= 8
-    && helpPngs.every((n) => fs.existsSync(path.join(dir, '.soma', 'help', n))) && !(await g('ls-files', '.soma/help'))
-    && (await ev(() => window.__t.saveState())).dirtyFiles === 0, helpPngs.join(','));
-  fs.rmSync(path.join(dir, '.soma', 'help', 'window.png'));
+  check('The guide is available as a project skill, with its illustration',
+    helpCopy.includes('](../help/sidebar.png)') && helpCopy.includes('For the agent')
+    && fs.existsSync(path.join(dir, '.soma', 'help', 'sidebar.png')) && !(await g('ls-files', '.soma/help'))
+    && (await ev(() => window.__t.saveState())).dirtyFiles === 0);
+  fs.rmSync(path.join(dir, '.soma', 'help', 'sidebar.png'));
   await setMode('soma-app', 'always');
-  check('Stufe neu gesetzt: fehlendes Bild kommt wieder', fs.existsSync(path.join(dir, '.soma', 'help', 'window.png')));
+  check('Changing the skill level restores a missing illustration', fs.existsSync(path.join(dir, '.soma', 'help', 'sidebar.png')));
   await setMode('soma-app', 'demand');
   await domClick('btn-help');
-  await waitFor('Hilfe offen', () => window.__t.help().open && window.__t.help().loadedImages > 0, 15000);
+  await waitFor('Help opens', () => window.__t.help().open, 15000);
   let hs = await ev(() => window.__t.help());
-  check('Help in der Leiste: Fenster mit den Abschnitten der Anleitung, Bild geladen, ohne Teile für den Agenten',
-    hs.sections[0] === 'The window' && hs.sections.includes('Export') && hs.current === 'The window' && hs.images === 1 && hs.loadedImages === 1
+  check('Help shows the guide and protects the underlying window',
+    hs.sections[0] === 'The window' && hs.sections.includes('Export') && hs.current === 'The window'
     && hs.text.includes('Model menu') && !hs.text.includes('For the agent') && await ev(() => document.getElementById('topbar').inert), JSON.stringify(hs).slice(0, 200));
-  await ev(() => document.querySelector('#help-nav button[data-help="4"]').click());
+  await ev(() => [...document.querySelectorAll('#help-nav button')].find((b) => b.textContent === 'Sidebar').click());
+  await waitFor('The sidebar illustration loads', () => window.__t.help().loadedImages === 1, 15000);
   hs = await ev(() => window.__t.help());
-  check('Abschnitt wechseln: Tools mit Bild und Liste', hs.current === 'Tools' && hs.text.includes('Section') && hs.images === 1, hs.current);
+  check('The sidebar guide shows the illustration and available panels', hs.current === 'Sidebar' && hs.text.includes('Drawings'), hs.current);
   await shot('skills-0-hilfe');
   await ev(() => document.querySelector('#help-nav button[aria-current=page]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   const closed = await ev(() => !window.__t.help().open && !document.getElementById('topbar').inert);
   await ev(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true })));
   await waitFor('F1', () => window.__t.help().open, 5000).catch(() => {});
   hs = await ev(() => window.__t.help());
-  check('Escape schließt, F1 öffnet wieder beim zuletzt gezeigten Abschnitt', closed && hs.open && hs.current === 'Tools', JSON.stringify({ closed, open: hs.open, cur: hs.current }));
+  check('Escape schließt, F1 öffnet wieder beim zuletzt gezeigten Abschnitt', closed && hs.open && hs.current === 'Sidebar', JSON.stringify({ closed, open: hs.open, cur: hs.current }));
   await ev(() => window.__t.closeHelp());
 
   check('Zeile mit Stufen-Schalter, Klick auf die Zeile öffnet die Karte mit drei Stufen, die eingestellte gewählt', await ev(() => {
@@ -152,7 +151,7 @@ try {
     && JSON.stringify(JSON.parse(fs.readFileSync(path.join(ud, 'projects', `${proj.id}.json`), 'utf8')).skills_on_demand) === JSON.stringify(pj().skills_on_demand));
   check('AGENTS.md führt ihn unter „Always follow“ (Pfad und englischer Name), der Rest der Datei bleibt', always().includes('- `.soma/skills/3d-printing.md`: 3D printing (FDM)')
     && !demand().includes('3d-printing') && (read('AGENTS.md') ?? '').startsWith('# Instructions for the coding agent') && (read('AGENTS.md') ?? '').includes('## Version history (git)'), String(block()));
-  check('Meldung: gilt immer, steht in AGENTS.md, Hinweis auf laufenden Agenten', (await ev(() => window.__t.toast())).text.includes('now always applies and is listed in AGENTS.md'));
+  check('Meldung: gilt immer, steht in AGENTS.md', (await ev(() => window.__t.toast())).text.includes('now always applies and is listed in AGENTS.md'));
   await waitFor('ungespeichert', () => window.__t.saveState()?.dirtyFiles >= 3, 10000).catch(() => {});
   check('Zählt als ungespeicherte Änderung (Kopie, project.json, AGENTS.md)', (await ev(() => window.__t.saveState())).dirtyFiles >= 3, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
@@ -172,7 +171,7 @@ try {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 5 }));
     return [...document.querySelectorAll('#menu-ctx .mi')].map((b) => (b.disabled ? '-' : '') + b.textContent.replace(/(F2|Del)$/, ''));
   });
-  check('Menü der Kopie: Öffnen und Pfad ja, Anlegen, Umbenennen und Löschen gesperrt', ['Open', 'Send path to agent', '-New file', '-Rename', '-Delete'].every((x) => skMenu.includes(x)), skMenu.join(','));
+  check('Menü der Kopie: Öffnen und Pfad ja, Anlegen, Umbenennen und Löschen gesperrt', ['Open', 'Add comment', '-New file', '-Rename', '-Delete'].every((x) => skMenu.includes(x)), skMenu.join(','));
   await ev(() => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith('Open'))?.click());
   await waitFor('Kopie im Code', () => window.__t.editor.state().file === '.soma/skills/3d-printing.md', 10000).catch(() => {});
   const skEd = await ev(() => window.__t.editor.state());
@@ -193,12 +192,8 @@ try {
   check('„Ansehen": Kopie im Code-Panel, nur lesen, mit Grund', ed.readOnly && ed.text.includes('# Skill: 3D printing (FDM)') && (ed.locked ?? '').includes('Skill'), JSON.stringify({ ro: ed.readOnly, locked: ed.locked }));
   await ev(() => window.__t.showPanel('skills'));
   await waitFor('Karte noch offen', () => document.querySelector('#skill-detail')?.dataset.id === '3d-printing' && !document.getElementById('skill-detail').hidden, 10000);
-  // Eingefügten Text mitschneiden (im Terminal bricht die lange Eingabezeile um)
-  await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
-  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('Send to agent')).click());
-  await sleep(300);
-  check('„Send to agent" fügt [Skill: .soma/skills/3d-printing.md] ein', (await ev(() => window.__t.toast())).text.includes('Added to the input of')
-    && await ev(() => window.__inserted) === '[Skill: .soma/skills/3d-printing.md] ', await ev(() => window.__inserted));
+  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('Add comment')).click());
+  check('The comment references the project skill file', await app.reviewReference() === '[Skill: .soma/skills/3d-printing.md]');
 
   // 3b) Einstellungen: Max. Überhang auf 50° (Wunsch des Nutzers), Werte landen in project.json und in der Kopie
   check('Aufgeklappt: Einstellungen mit Standardwerten (Max. overhang angle 45°, Nozzle 0.4 mm, Material PLA)', await ev(() =>
@@ -226,10 +221,10 @@ try {
   c3 = read('.soma/skills/3d-printing.md') ?? '';
   check('Auswahl (PETG) und Zahl mit Komma (0,6): in der Kopie mit Punkt', c3.includes('| Material | PETG |') && c3.includes('| Nozzle | 0.6 mm |') && c3.includes('NOZZLE = 0.6')
     && await ev(() => document.getElementById('sk-3d-printing-nozzle').value) === '0.6');
-  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('Send to agent')).click());
-  await sleep(300);
-  check('„Send to agent" nennt die geänderten Einstellungen (Zahlen mit Punkt)', await ev(() => window.__inserted)
-    === '[Skill: .soma/skills/3d-printing.md, settings: Material = PETG, Nozzle = 0.6 mm, Max. overhang angle = 50°] ', await ev(() => window.__inserted));
+  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('Add comment')).click());
+  const skillReference = await app.reviewReference();
+  check('The comment references the customized skill settings', skillReference
+    === '[Skill: .soma/skills/3d-printing.md, settings: Material = PETG, Nozzle = 0.6 mm, Max. overhang angle = 50°]', skillReference);
   await ev(() => document.querySelector('#skill-detail .sk-var[data-var="nozzle"] .sk-reset').click());
   await waitFor('Düse zurück', () => window.__t.skills().skills.find((x) => x.id === '3d-printing')?.vars.nozzle === 0.4, 10000);
   check('Zurück auf den Standard: Düse 0.4 mm, aus project.json entfernt, Kopie wieder 0.4', settings()['3d-printing']?.overhang === 50 && settings()['3d-printing']?.material === 'PETG' && !('nozzle' in (settings()['3d-printing'] ?? {}))
@@ -248,7 +243,7 @@ try {
   const fest = read('.soma/skills/strength.md') ?? '';
   check('Festigkeit (bei Bedarf), Sicherheit 3: Kopie mit SAFETY = 3, Hinweis nennt `safety` als vom Nutzer gesetzt, „An Agent geben“ da', fest.includes('`SAFETY = 3`')
     && fest.includes('The user set `safety` in the app.') && !(await skill('strength')).changed
-    && await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].some((b) => b.textContent.includes('Send to agent'))), fest.slice(0, 400));
+    && await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].some((b) => b.textContent.includes('Add comment'))), fest.slice(0, 400));
 
   // 4) Zweiter Skill auf Immer: in AGENTS.md in der Reihenfolge des Einschaltens
   await setMode('tolerances', 'always');
@@ -280,7 +275,7 @@ try {
     && settings()['3d-printing']?.overhang === 55, backups.join(','));
   check('AGENTS.md und project.json ohne 3D-Druck, Toleranzen bleibt', !(block() ?? '').includes('3d-printing') && always().includes('tolerances.md')
     && JSON.stringify(pj().skills) === '["design-workflow","cadquery","parametric","tolerances"]' && !(pj().skills_on_demand ?? []).includes('3d-printing'));
-  check('Meldung nennt den laufenden Agenten', /is off\..*tell it/.test((await ev(() => window.__t.toast())).text), (await ev(() => window.__t.toast())).text);
+  check('Meldung bestätigt das Ausschalten', /is off\./.test((await ev(() => window.__t.toast())).text), (await ev(() => window.__t.toast())).text);
 
   // 6) Datei eines aktiven Skills fehlt: gemeldet, nicht neu angelegt (E28)
   // Der Dateibaum ist dabei offen: Er folgt Änderungen in .soma/skills/ ohne Wechsel des Panels

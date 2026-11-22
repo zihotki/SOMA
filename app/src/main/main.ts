@@ -2,20 +2,18 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell, typ
 import fs from 'node:fs';
 import path from 'node:path';
 import { aboutInfo, aboutText, osName } from './about';
-import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
 import { choose, chooseInputFiles, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
 import { viewDxf } from './dxf';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
-import { terminalEnv } from './terminals';
 import { readHelp, readHelpImage } from './help';
 import { initLog, log } from './log';
-import { adoptLoginShellPath, appIcon, editBackupsDir, helpDir, libraryBackupsDir, logsDir, pythonExe, skillDirs, skillsDir, thumbnailsDir, userDataDir, userSkillsDir } from './paths';
-import { SOMA_VERSION } from '../shared/version';
+import { appIcon, editBackupsDir, helpDir, libraryBackupsDir, logsDir, pythonExe, skillDirs, skillsDir, thumbnailsDir, userDataDir, userSkillsDir } from './paths';
+import { APP_NAME, SOMA_VERSION } from '../shared/version';
+import { appendReviewComment, readReviewComments } from './review';
 import { readSettings, writeSettings } from './settings';
-import { checkUpdate } from './updates';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
@@ -25,11 +23,25 @@ import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProje
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
-if (process.env.SOMA_USER_DATA) app.setPath('userData', process.env.SOMA_USER_DATA);
-else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'soma'));
+const profile = process.env.SOMA_USER_DATA || (process.platform === 'win32' && process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, 'soma') : app.getPath('userData'));
+app.setPath('userData', profile);
+
+// Resolve the existing profile before setting the display name.
+app.setName(APP_NAME);
+
+// A CAD Lab profile has one viewer and one bridge listener.
+const singleProfile = !!process.env.SOMA_USER_DATA && process.env.SOMA_TEST !== '1';
+const ownsProfile = !singleProfile || app.requestSingleInstanceLock();
+if (ownsProfile && singleProfile) app.on('second-instance', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+if (!ownsProfile) app.quit();
 
 // Protokoll (log.ts) so früh wie möglich: Auch Fehler beim Start sollen drinstehen
-initLog(logsDir(), {
+if (ownsProfile) initLog(logsDir(), {
   version: SOMA_VERSION, system: `${osName()} ${process.arch}`, electron: process.versions.electron,
   packaged: app.isPackaged ? 'yes' : 'no (development)', python: pythonExe(), appData: userDataDir(),
 });
@@ -45,7 +57,7 @@ const softwareGlFlag = () => path.join(app.getPath('userData'), 'software-gl');
 if (process.platform === 'linux' && fs.existsSync(softwareGlFlag())) app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 let win: BrowserWindow | null = null;
-/** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
+/** Active project for requests from the local render bridge. */
 let controller: ProjectController | null = null;
 /** Im Testmodus landet Kopiertes hier statt in der echten Zwischenablage des Nutzers. */
 let testClipboard = '';
@@ -70,8 +82,7 @@ function registerIpc(ctl: ProjectController): void {
   const dir = () => ctl.need().dir;
 
   ipcMain.handle('project:current', () => ctl.info());
-  // Nur der feste Name fürs Tutorial (E94), kein freier Text aus dem Renderer
-  ipcMain.handle('project:create', (_e, kind?: unknown) => ctl.create(kind === 'tutorial' ? 'Tutorial' : undefined));
+  ipcMain.handle('project:create', () => ctl.create());
   ipcMain.handle('project:list', async () => (await import('./workspace')).listProjects());
   ipcMain.handle('project:open', (_e, id: string) => ctl.open(id));
   ipcMain.handle('project:saveState', () => ctl.saveState());
@@ -93,13 +104,6 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:createFromCadQuery', () => ctl.createFromCadQuery());
   ipcMain.handle('project:exportCadQuery', () => ctl.exportCadQuery());
   ipcMain.handle('project:reveal', () => ctl.reveal());
-  // Agenten-Apps (Claude Desktop, Codex-App) öffnen den Arbeitsordner selbst. `soma` finden sie über .soma/env (AGENTS.md)
-  ipcMain.handle('project:copyPath', (): FileOpResult => {
-    const dir = ctl.session?.dir;
-    if (!dir) return { ok: false, error: 'No model is open.' };
-    if (process.env.SOMA_TEST === '1') testClipboard = dir; else clipboard.writeText(dir);
-    return { ok: true, path: dir };
-  });
   ipcMain.handle('project:setThumb', (_e, dataUrl: string) => {
     const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
     if (!m || m[1].length > 2_000_000 || !ctl.session) return;
@@ -164,12 +168,6 @@ function registerIpc(ctl: ProjectController): void {
     return err ? { ok: false, error: err } : { ok: true, path: String(rel ?? '') };
   });
   // Links aus Markdown-Dateien (E51). Nur Web und Mail: file:, Programme und eigene Protokolle könnten etwas ausführen.
-  // „Send to agent“ legt den Text auch in die Zwischenablage, für Agenten-Apps außerhalb der App (Claude Desktop, Codex-App)
-  ipcMain.handle('app:copyText', (_e, text: unknown): FileOpResult => {
-    if (typeof text !== 'string' || text.length > 1_000_000) return { ok: false, error: 'Nothing to copy.' };
-    if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);
-    return { ok: true };
-  });
   ipcMain.handle('app:openUrl', async (_e, url: unknown): Promise<FileOpResult> => {
     const u = String(url ?? '');
     if (!/^(https?:\/\/|mailto:)/i.test(u)) return { ok: false, error: `Only web and mail addresses can be opened: ${u.slice(0, 100)}` };
@@ -197,13 +195,14 @@ function registerIpc(ctl: ProjectController): void {
   });
   ipcMain.handle('dxf:view', (_e, rel: unknown, known: unknown) => viewDxf(dir(), String(rel), known == null ? null : String(known)));
 
-  ipcMain.handle('term:create', (_e, opts?: { command?: string }) => ctl.need().terminals.create(opts));
-  ipcMain.on('term:write', (_e, id: number, data: string) => ctl.session?.terminals.write(id, data));
-  ipcMain.on('term:resize', (_e, id: number, cols: number, rows: number) => ctl.session?.terminals.resize(id, cols, rows));
-  ipcMain.on('term:kill', (_e, id: number) => ctl.session?.terminals.kill(id));
+  const reviewRoot = (projectId: unknown): string => {
+    const session = ctl.need();
+    if (session.id !== projectId) throw new Error('This project is no longer open.');
+    return session.dir;
+  };
+  ipcMain.handle('review:list', (_e, projectId: unknown) => readReviewComments(reviewRoot(projectId)));
+  ipcMain.handle('review:add', (_e, projectId: unknown, draft: unknown) => appendReviewComment(reviewRoot(projectId), draft));
 
-  const agents = () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env);
-  ipcMain.handle('agents:detect', () => agents());
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
@@ -303,11 +302,9 @@ function registerIpc(ctl: ProjectController): void {
     setTimeout(() => { app.relaunch(); app.exit(0); }, 1500); // Zeit, die Meldung im Fenster zu lesen
     return true;
   });
-  ipcMain.handle('about:info', () => aboutInfo(agents));
-  // Nur wenn die Einstellung es erlaubt: Ausgeschaltet geht keine Anfrage ins Netz
-  ipcMain.handle('updates:check', () => checkUpdate(readSettings().settings.start.updateCheck));
+  ipcMain.handle('about:info', () => aboutInfo());
   ipcMain.handle('about:copy', async (): Promise<FileOpResult> => {
-    const text = aboutText(await aboutInfo(agents));
+    const text = aboutText(await aboutInfo());
     if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);
     return { ok: true };
   });
@@ -324,20 +321,20 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];
     if (!buttons.length) return -1;
-    return choose(win, { title: String(o.title ?? 'SOMA'), message: String(o.message ?? ''), detail: o.detail == null ? undefined : String(o.detail), buttons });
+    return choose(win, { title: String(o.title ?? APP_NAME), message: String(o.message ?? ''), detail: o.detail == null ? undefined : String(o.detail), buttons });
   });
 
   // Nur im Testmodus: vorbereitete Antworten für Dialoge (siehe dialogs.ts)
   if (process.env.SOMA_TEST === '1') {
     ipcMain.handle('test:answers', (_e, a: unknown[]) => setTestAnswers(a));
-    // Adresse und Schlüssel für soma render, damit Tests es auch außerhalb eines Terminals aufrufen können
+    // Adresse und Schlüssel für soma render, damit Tests es aus einem externen Prozess aufrufen können
     ipcMain.handle('test:bridge', () => bridgeEnv());
     ipcMain.handle('test:clipboard', () => testClipboard);
     ipcMain.handle('test:quit', () => { setTimeout(() => { stopBridge(); stopWarm(); app.exit(0); }, 100); });
     // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
     ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
-    // `rect` (in CSS-Pixeln): nur dieser Ausschnitt, etwa für die Bilder der Hilfe (test/helpshots.mjs)
+    // `rect` limits the capture to an area in CSS pixels.
     // capturePage(rect) liefert bei Fenstern außerhalb des Bildschirms das ganze Bild, deshalb danach zuschneiden
     ipcMain.handle('test:screenshot', async (e, file: string, rect?: Electron.Rectangle) => {
       let img = await e.sender.capturePage();
@@ -357,7 +354,7 @@ function onRendererGone(wc: WebContents, reason: string, exitCode: number): void
   if (reason === 'launch-failed' && process.env.SOMA_HIDDEN !== '1') {
     // Häufigste Ursache unter Windows: das Programm liegt auf einem Netzlaufwerk. Die sandboxed Prozesse laufen mit
     // eingeschränktem Token, verlieren dort den Zugriff und starten nicht. Ohne Meldung bliebe nur ein schwarzes Fenster.
-    dialog.showErrorBox('SOMA cannot start its user interface',
+    dialog.showErrorBox(`${APP_NAME} cannot start its user interface`,
       `The display process could not be started (code ${exitCode}).\n\nA common cause: the program is on a network drive. ` +
       'Install or start it from a local disk (for example C:).');
     app.quit();
@@ -391,7 +388,7 @@ const testWindowMode = process.env.SOMA_HIDDEN;
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 1600, height: 950, title: 'SOMA', icon: appIcon(), backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
+    width: 1600, height: 950, title: APP_NAME, icon: appIcon(), backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -470,19 +467,18 @@ function hostDialogs(wc: WebContents): void {
   wc.once('destroyed', () => { drop(); ipcMain.removeListener('dialog:ready', onReady); ipcMain.removeListener('dialog:res', onRes); });
 }
 
-// Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
-app.whenReady().then(async () => {
+// Publish the local render connection before creating the viewer.
+if (ownsProfile) app.whenReady().then(async () => {
   logIpcFailures();
   // Dunkel wie die Oberfläche: unter Windows sonst eine weiße Titelleiste, ebenso die Dialoge zum Öffnen und Speichern
   nativeTheme.themeSource = 'dark';
-  adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();
   sweepDiscarded(); // Reste verworfener Modelle (E69) vom letzten Mal
   renameOldSkillFiles(skillDirs()); // eigene Fassungen unter den Kennungen bis 0.5.0 (E87)
   await startBridge(async (route, body) => {
     if (!controller) return { status: 503, body: { ok: false, error: 'The app has no window right now.' } };
-    if (route === 'render') return controller.renderForAgent(body);
+    if (route === 'render') return controller.renderFromCli(body);
     return { status: 404, body: { ok: false, error: `Unknown request: ${route}` } };
   });
   createWindow();

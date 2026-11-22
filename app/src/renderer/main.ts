@@ -1,15 +1,15 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
+import type { AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
-import { SOMA_VERSION } from '../shared/version';
+import { APP_NAME, SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isDxf, isPdf, type Mark } from './code';
 import { DRAWINGS_KEY, DrawingsView } from './drawings';
 import { DrawingLink } from './drawlink';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
-import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
+import { FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { FileView } from './fileview';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
@@ -23,10 +23,9 @@ import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspag
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
 import { StructureTree } from './tree';
-import { Tour, tourSteps, type TourContext } from './tutorial';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
-import { TerminalTabs } from './terminals';
+import { ReviewPanel } from './review';
 import { $, ask, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
 import { VideoView } from './videoview';
@@ -64,19 +63,19 @@ function createViewer(): Viewer {
     return new Viewer($('viewer'));
   } catch (e) {
     const title = el('h1', {}, '3D view unavailable');
-    const text = el('p', {}, 'SOMA needs WebGL 2 for the 3D view, but this system could not provide it. Install or update the graphics driver, or start SOMA on a machine with graphics acceleration.');
+    const text = el('p', {}, `${APP_NAME} needs WebGL 2 for the 3D view. Install or update the graphics driver, or start the viewer on a machine with graphics acceleration.`);
     document.body.replaceChildren(el('div', { className: 'fatal' }, title, text, el('pre', {}, String(e instanceof Error ? e.message : e))));
     void window.soma.gpu.webglFailed().then((restarting) => {
       if (!restarting) return;
       title.textContent = 'Restarting with software rendering';
-      text.textContent = 'No graphics acceleration is available, so SOMA restarts and draws the 3D view in software. This is slower for large models. If no window appears, start SOMA again.';
+      text.textContent = 'The viewer is restarting with software rendering. Large models can take longer to draw.';
     }).catch(() => { /* Meldung bleibt */ });
     throw e;
   }
 }
 const viewer = createViewer();
 viewer.attachCube($('cube-view'));
-const terminals = new TerminalTabs($('term-tabs'), $('term-panes'), $('btn-term-add'), $('strip-tabs'));
+const review = new ReviewPanel(api.review, toast);
 
 let project: ProjectInfo | null = null;
 let saveState: SaveState | null = null;
@@ -88,7 +87,6 @@ let loadSeq = 0;
 let selection: { partId: string; pick: PickResult | null } | null = null;
 /** Alle ausgewählten Bauteile (Strg/Shift-Klick, Rahmen, Baum). `selection` ist das zuletzt gewählte darunter. */
 let picked: string[] = [];
-let agents: AgentInfo[] = [];
 const textCache = new Map<string, string>();
 
 const store = {
@@ -166,7 +164,6 @@ function showCode(on: boolean): void {
 function renderLayout(): void {
   $('btn-lay-side').setAttribute('aria-pressed', String(!!panel));
   $('btn-lay-code').setAttribute('aria-pressed', String(codeOpen));
-  $('btn-lay-agent').setAttribute('aria-pressed', String(!$('terminals').classList.contains('collapsed')));
 }
 
 const code = new CodePanel(
@@ -180,11 +177,7 @@ const code = new CodePanel(
     build: () => void api.build.run(),
     link: (href) => openLink(href),
     image: async (rel) => { try { return await imageUrl(rel); } catch { return null; } },
-    quote: (file, pages, text) => {
-      // Eine Zeile mit Datei und Seite, wie Auswahl und Markierung. Sehr lange Zitate werden gekürzt, das steht in der Meldung.
-      const cut = text.length > MAX_QUOTE;
-      insertToAgent(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Quote shortened to ${MAX_QUOTE} characters.` : undefined);
-    },
+    quote: addQuoteComment,
     markPage: (file, page, canvas) => void markSource(`${file} p. ${page}`, canvas, canvas.width, canvas.height),
     dxf: (rel, known) => api.dxf.view(rel, known),
     markDxf: (label, canvas) => void markSource(label, canvas, canvas.width, canvas.height),
@@ -220,7 +213,7 @@ const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), d
   setDefault: (id, mode) => api.skills.setDefault(id, mode),
   open: (file) => void openCode(file),
   edit: (id) => void settings.open(id),
-  insert: (text) => insertToAgent(text),
+  insert: (text) => addComment(text),
   toast,
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
 });
@@ -270,8 +263,6 @@ const aboutPage = new AboutPage($('st-about'), {
   api: api.about, toast,
   openUrl: (url) => void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); }),
   openFolder: (area) => void api.storage.open(area).then((r) => { if (!r.ok) toast(`The folder could not be opened: ${r.error ?? 'unknown error'}`, 'error'); }),
-  updateCheck: () => appSettings.settings.start.updateCheck,
-  setUpdateCheck: async (on) => { const r = await changeSettings({ start: { updateCheck: on } }); if (!$('start').hidden) void renderUpdate(); return r; },
 });
 
 // Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
@@ -313,7 +304,7 @@ const paramsPanel = new ParamsPanel({ list: $('params-list'), foot: $('params-fo
   set: (values) => api.params.set(values),
   resetAll: () => api.params.resetAll(),
   openCode: (file, line, label) => void openCode(file, { from: line, to: line, label }),
-  insert: (text) => insertToAgent(text),
+  insert: (text) => addComment(text),
   toast,
 });
 
@@ -361,7 +352,7 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
   reveal: (rel) => void api.fs.reveal(rel).then((r) => { if (!r.ok) toast(r.error ?? 'Explorer could not be opened.', 'error'); }),
   openExternal: (rel) => void openExternal(rel),
   mark: (rel) => void markImage(rel),
-  toAgent: (rel) => insertToAgent(`[File: ${rel}] `),
+  comment: (rel) => addComment(`[File: ${rel}] `, null),
   copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Path copied: ${rel}`), (e) => toast(`The path could not be copied: ${e instanceof Error ? e.message : String(e)}`, 'error')),
   showInTree: (rel, rename) => void showInTree(rel, rename),
 });
@@ -403,11 +394,8 @@ $('btn-file-new').addEventListener('click', () => files.startCreate('', false));
 $('btn-folder-new').addEventListener('click', () => files.startCreate('', true));
 
 // Dateien und Ordner ziehen: überall im Fenster ablegen landet in inputs/. Ohne das würde Electron die Datei als Seite öffnen.
-// Bauteile und Dateien aus der App lassen sich ins Terminal ziehen (ersetzt die Übergabeleiste, Entwurf 2).
 let dragDepth = 0;
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-const isInternal = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === DRAG_FILE);
-const overTerminal = (e: DragEvent) => !!(e.target as HTMLElement | null)?.closest?.('#term-panes');
 document.addEventListener('dragenter', (e) => {
   if (!hasFiles(e)) return;
   if (dragDepth++ === 0) { document.body.classList.add('dragging'); if (project) showPanel('files'); }
@@ -415,22 +403,12 @@ document.addEventListener('dragenter', (e) => {
 document.addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
 document.addEventListener('dragover', (e) => {
   e.preventDefault();
-  const term = isInternal(e) && overTerminal(e);
-  $('term-panes').classList.toggle('dropping', term);
-  if (e.dataTransfer) e.dataTransfer.dropEffect = (hasFiles(e) && project) || term ? 'copy' : 'none';
+  if (e.dataTransfer) e.dataTransfer.dropEffect = hasFiles(e) && project ? 'copy' : 'none';
 });
-document.addEventListener('dragend', () => $('term-panes').classList.remove('dropping'));
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   document.body.classList.remove('dragging');
-  $('term-panes').classList.remove('dropping');
-  if (isInternal(e)) {
-    if (!overTerminal(e)) return;
-    const rel = e.dataTransfer?.getData(DRAG_FILE);
-    if (rel) insertToAgent(`[File: ${rel}] `);
-    return;
-  }
   const list = [...(e.dataTransfer?.files ?? [])];
   if (list.length && project) void importFiles(list);
 });
@@ -606,25 +584,23 @@ function errorText(): string | null {
   return `[Build error: ${where}${e.message.replace(/\s+/g, ' ').trim().slice(0, 400)}] `;
 }
 
-/** Fügt Text in die Eingabezeile des aktiven Terminals ein. Abschicken macht der Nutzer selbst (E11). `done` steht vor der Meldung. */
-function insertToAgent(text: string | null, done?: string): void {
-  if (!text) return;
-  const pre = done ? `${done}\n` : '';
-  // Immer auch in die Zwischenablage: Eine Agenten-App außerhalb der App (Claude Desktop, Codex-App) erreicht die Notiz nur so.
-  // Ob im Terminal ein Agent läuft, lässt sich nicht für jeden Agenten verlässlich erkennen
-  void api.copyText(text);
-  if (!terminals.count) { toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info'); return; }
-  setAgentCollapsed(false);
-  const title = terminals.insert(text);
-  if (title) toast(`${pre}Added to the input of ${title}. Enter sends it. Also copied to the clipboard.`);
-  else toast(`${pre}Copied to the clipboard. All terminals have ended, open a new one with +.`, 'info');
+function addComment(reference: string | null, buildId = fileView.active ? null : map?.build ?? null): void {
+  if (reference && project) review.add(project.id, reference, buildId);
 }
+
+function addQuoteComment(file: string, pages: string, text: string): void {
+  const cut = text.length > MAX_QUOTE;
+  if (cut) toast(`Quote shortened to ${MAX_QUOTE} characters.`, 'info');
+  addComment(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"]`, null);
+}
+
+$('btn-review').addEventListener('click', () => { if (project) void review.show(project.id); });
 
 // ---- Messen (E9) ------------------------------------------------------------------------------------------------
 
 const measureTool = new MeasureTool({
   card: $('measure-card'), body: $('measure-body'), button: $<HTMLButtonElement>('btn-measure'), close: $<HTMLButtonElement>('btn-measure-close'),
-  again: $<HTMLButtonElement>('btn-measure-again'), agent: $<HTMLButtonElement>('btn-measure-agent'), viewerEl: $('viewer'),
+  again: $<HTMLButtonElement>('btn-measure-again'), agent: $<HTMLButtonElement>('btn-measure-comment'), viewerEl: $('viewer'),
 }, {
   viewer,
   source: () => fileView.source ?? (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
@@ -632,7 +608,7 @@ const measureTool = new MeasureTool({
   noGeometry: () => (map?.mesh ? 'Mesh files (STL, 3MF, AMF, OBJ) have no CAD geometry, so they cannot be measured. Open the STEP file or the model to measure.' : null),
   reload: () => void (fileView.active ? fileView.filesChanged() : loadModel()),
   part: (id) => partEntry(id),
-  insert: (t) => insertToAgent(t),
+  insert: (t) => addComment(t),
 });
 
 // ---- Schnitt ----------------------------------------------------------------------------------------------------
@@ -668,15 +644,12 @@ function toggleDrawings(): void {
   code.openPane(DRAWINGS_KEY, 'Drawings', () => new DrawingsView({
     list: () => api.drawings.list(), build: (f) => api.drawings.build(f), readBinary: (rel) => api.fs.readBinary(rel),
     pdf: {
-      quote: (file, pages, text) => {
-        const cut = text.length > MAX_QUOTE;
-        insertToAgent(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Quote shortened to ${MAX_QUOTE} characters.` : undefined);
-      },
+      quote: addQuoteComment,
       markPage: (file, page, canvas) => void markSource(`${file} p. ${page}`, canvas, canvas.width, canvas.height),
     },
     openCode: (file, line, label) => void openCode(file, line ? { from: line, to: line, label } : undefined),
     openFile: (rel) => void openCode(rel),
-    insert: (t) => insertToAgent(t), toast, link: drawingLink,
+    addComment, toast, link: drawingLink,
     menu: $('menu-ctx'),
     exportFiles: async (what, sheet) => {
       const r = await api.drawings.export(what, sheet);
@@ -708,11 +681,11 @@ const explodeTool = new ExplodeTool({
   range: $<HTMLInputElement>('explode-range'), value: $('explode-value'), hint: $('explode-hint'),
   trails: $<HTMLButtonElement>('btn-explode-trails'), fit: $<HTMLButtonElement>('btn-explode-fit'), viewerEl: $('viewer'),
   back: $<HTMLButtonElement>('btn-explode-back'), play: $<HTMLButtonElement>('btn-explode-play'), next: $<HTMLButtonElement>('btn-explode-next'),
-  step: $('explode-step'), send: $<HTMLButtonElement>('btn-explode-agent'),
+  step: $('explode-step'), send: $<HTMLButtonElement>('btn-explode-comment'),
 }, {
   viewer,
   busy,
-  insert: (t) => insertToAgent(t),
+  insert: (t) => addComment(t),
   beforeOn: () => { if (measureTool.isActive) measureTool.setActive(false); },
   settled: () => sectionTool.refresh(), // der Bereich des Schiebers folgt den verschobenen Bauteilen
 });
@@ -722,6 +695,7 @@ $('btn-measure').addEventListener('click', () => { if (measureTool.isActive) exp
 
 // ---- Markierung (E16) -------------------------------------------------------------------------------------------
 
+let markupBuildId: string | null = null;
 const markup = new Markup({
   viewer: $('viewer'), layer: $('markup'), canvas: $<HTMLCanvasElement>('mark-canvas'), text: $<HTMLInputElement>('mark-text'),
   hint: $('mark-hint'), tools: $('mark-tools'), undo: $<HTMLButtonElement>('btn-mark-undo'), del: $<HTMLButtonElement>('btn-mark-delete'),
@@ -733,6 +707,7 @@ const markup = new Markup({
 function startMarkup(): void {
   if (!project || markup.active) return;
   menus.close();
+  markupBuildId = fileView.active ? null : map?.build ?? null;
   markup.open(viewer.partList().length ? viewer.snapshot() : null);
 }
 
@@ -766,7 +741,7 @@ async function mayReplaceMarkup(source: string): Promise<boolean> {
   if (!markup.active) return true;
   if (markup.source === source) return false;
   if (!markup.drawn) return true;
-  const c = await api.dialog.choose({ title: 'Markup', message: 'The open markup has not been sent to the agent yet.', detail: `Discard it and open ${source}?`, buttons: ['Discard and switch', 'Cancel'] });
+  const c = await api.dialog.choose({ title: 'Markup', message: 'This markup has unsaved changes.', detail: `Discard it and open ${source}?`, buttons: ['Discard and switch', 'Cancel'] });
   return c === 0;
 }
 
@@ -786,15 +761,21 @@ async function markSource(label: string, img: CanvasImageSource, iw: number, ih:
   g.imageSmoothingQuality = 'high';
   g.drawImage(img, (c.width - iw * f) / 2, (c.height - ih * f) / 2, iw * f, ih * f);
   markup.close();
+  markupBuildId = null;
   markup.open(c, label);
 }
 
-async function sendMarkup(): Promise<void> {
+async function saveMarkup(): Promise<void> {
   const btn = $<HTMLButtonElement>('btn-mark-send');
-  if (btn.disabled || !markup.active) return;
+  if (btn.disabled || !markup.active || !project) return;
+  const owner = project;
+  const buildId = markupBuildId;
   btn.disabled = true;
   try {
-    const r = await api.fs.saveFeedback(await markup.image());
+    const image = await markup.image();
+    if (project !== owner) return;
+    const r = await api.fs.saveFeedback(image);
+    if (project !== owner) return;
     // Ging das Speichern schief, bleibt die Zeichnung offen: Nichts geht verloren, der Nutzer kann es noch einmal versuchen
     if (!r.ok || !r.path) { toast(`The markup could not be saved: ${r.error ?? 'unknown error'}`, 'error'); return; }
     const old = versions.previewed, source = markup.source, shownFile = fileView.rel;
@@ -807,7 +788,8 @@ async function sendMarkup(): Promise<void> {
     const note = source ? `, drawn on ${source}`
       : (old ? `, shows the older version ${old.short} "${old.subject.slice(0, 80)}"` : '')
         + (shownFile ? `, shows the STEP file ${shownFile}, not the model` : '') + (cut ? `, ${cut}` : '');
-    insertToAgent(`[Markup: ${r.path}${note}] `, `Markup saved: ${r.path}`);
+    toast(`Markup saved: ${r.path}`);
+    addComment(`[Markup: ${r.path}${note}] `, buildId);
   } catch (e) {
     toast(`The markup could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error');
   } finally { btn.disabled = false; }
@@ -832,7 +814,7 @@ const animTool = new AnimTool({
   speed: $<HTMLSelectElement>('anim-speed'), viewerEl: $('viewer'),
 }, {
   viewer, list: () => api.anim.list(), build: (f) => api.anim.build(f), readBinary: (rel) => api.fs.readBinary(rel), renderVideo: (id) => api.render.video(id),
-  beforeOn: () => endOthers('anim'), insert: (t) => insertToAgent(t), toast,
+  beforeOn: () => endOthers('anim'), insert: (t) => addComment(t), toast,
   showVideo: (rel) => { void refreshFiles(); seen.add(videoKey(rel)); scheduleViewLists(); void videoView.open(rel); },
   changed: () => renderResults(),
   tick: () => animPanel.tick(),
@@ -852,20 +834,20 @@ const analysisPanel = new AnalysisPanel({
   list: $('an-list'), listCount: $('an-count'), rows: $('an-rows'),
   report: $('an-report'), back: $<HTMLButtonElement>('btn-an-back'), backCount: $('an-back-count'), code: $<HTMLButtonElement>('btn-an-code'),
   more: $<HTMLButtonElement>('btn-an-more'), body: $('an-body'), pick: $('an-pick'), rerun: $<HTMLButtonElement>('btn-result-rerun'),
-  agent: $<HTMLButtonElement>('btn-result-agent'), menu: $('menu-ctx'),
+  agent: $<HTMLButtonElement>('btn-result-comment'), menu: $('menu-ctx'),
 }, {
-  tool: resultTool, insert: (t) => insertToAgent(t), openCode: (f) => void openCode(f),
+  tool: resultTool, insert: (t) => addComment(t), openCode: (f) => void openCode(f),
   copy: (t) => void navigator.clipboard.writeText(t).then(() => toast(`Copied: ${t}`), (e) => toast(`Could not copy: ${e instanceof Error ? e.message : String(e)}`, 'error')),
   isNew: (r) => !seen.has(resultKey(r)), seen: (r) => { seen.add(resultKey(r)); },
 });
 const animPanel = new AnimPanel({
   list: $('am-list'), listCount: $('am-count'), rows: $('am-rows'),
   report: $('am-report'), back: $<HTMLButtonElement>('btn-am-back'), backCount: $('am-back-count'), code: $<HTMLButtonElement>('btn-am-code'),
-  body: $('am-body'), video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-agent'),
+  body: $('am-body'), video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-comment'),
 }, {
   tool: animTool, videos: () => viewLists.videos, openVideo: (rel) => void videoView.open(rel),
   openCode: (file, line) => void openCode(file, line ? { from: line, to: line, label: animTool.currentName ?? 'Animation' } : undefined),
-  insert: (t) => insertToAgent(t), isNew: (k) => !seen.has(k), seen: (k) => { seen.add(k); },
+  insert: (t) => addComment(t), isNew: (k) => !seen.has(k), seen: (k) => { seen.add(k); },
   fileMenu: (rel, x, y) => files.menuFor(rel, x, y),
   closedDirs: () => { try { return project ? JSON.parse(store.get(`soma.anim.closedDirs.${project.id}`) ?? '[]') as string[] : []; } catch { return []; } },
   setClosedDirs: (dirs) => { if (project) store.set(`soma.anim.closedDirs.${project.id}`, JSON.stringify(dirs)); },
@@ -878,17 +860,17 @@ for (const [id, isOn] of [['btn-measure', () => measureTool.isActive], ['btn-exp
 const videoView = new VideoView({
   root: $('videoview'), video: $<HTMLVideoElement>('video-el'), title: $('video-title'), play: $<HTMLButtonElement>('btn-video-play'),
   back: $<HTMLButtonElement>('btn-video-back'), fwd: $<HTMLButtonElement>('btn-video-fwd'), range: $<HTMLInputElement>('video-range'), time: $('video-time'),
-  mark: $<HTMLButtonElement>('btn-video-mark'), agent: $<HTMLButtonElement>('btn-video-agent'), close: $<HTMLButtonElement>('btn-video-close'),
+  mark: $<HTMLButtonElement>('btn-video-mark'), agent: $<HTMLButtonElement>('btn-video-comment'), close: $<HTMLButtonElement>('btn-video-close'),
   mute: $<HTMLButtonElement>('btn-video-mute'), volume: $<HTMLInputElement>('video-volume'), more: $<HTMLButtonElement>('btn-video-more'),
 }, {
-  readBinary: (rel) => api.fs.readBinary(rel), insert: (t) => insertToAgent(t), toast,
+  readBinary: (rel) => api.fs.readBinary(rel), insert: (t) => addComment(t), toast,
   markFrame: (label, c) => markSource(label, c, c.width, c.height),
   fileMenu: (rel, x, y) => files.menuFor(rel, x, y), load: store.get, save: store.set,
 });
 
 $('btn-mark').addEventListener('click', startMarkup);
 $('btn-mark-cancel').addEventListener('click', () => markup.close());
-$('btn-mark-send').addEventListener('click', () => void sendMarkup());
+$('btn-mark-send').addEventListener('click', () => void saveMarkup());
 
 /**
  * Rechtsklick auf ein Teil (Baum oder Bild). Ist es Teil einer Mehrfachauswahl, gilt das Menü für alle. Sonst wird es
@@ -910,7 +892,7 @@ function openPartMenu(id: string, x: number, y: number): void {
     menuItem('Zoom to part', { icon: 'fit', onClick: () => viewer.focusPart(id) }),
     el('div', { className: 'msep' }),
     menuItem('Show code', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
-    menuItem('Send to agent', { icon: 'send', onClick: () => { selectPart(id, null); insertToAgent(selectionText()); } }),
+    menuItem('Add comment', { icon: 'comment', onClick: () => addComment(selectionText()) }),
     menuItem('Export …', { icon: 'export', onClick: () => { selectPart(id, null); exportScope = 'sel'; openExportMenu(); } }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
@@ -947,7 +929,7 @@ function openSelectionMenu(x: number, y: number): void {
     menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', kbd: 'T', onClick: () => selectionAction('ghost') }),
     menuItem('Zoom to selection', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
     el('div', { className: 'msep' }),
-    menuItem('Send to agent', { icon: 'send', onClick: () => insertToAgent(selectionText()) }),
+    menuItem('Add comment', { icon: 'comment', onClick: () => addComment(selectionText()) }),
     menuItem('Clear selection', { icon: 'x', kbd: 'Esc', onClick: () => selectPart(null, null) }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
@@ -979,10 +961,10 @@ function selectionAction(a: 'hide' | 'showAll' | 'isolate' | 'ghost'): void {
 }
 
 // Tasten für die Auswahl (wie in CAD): H ausblenden, Shift H alles einblenden, I isolieren, T transparent, Esc Auswahl aufheben.
-// Nicht beim Schreiben (Code, Terminal, Felder) und nicht, solange Markierung, Video, Einstellungen oder die Startseite offen sind
+// Nicht beim Schreiben (Code oder Felder) und nicht, solange Markierung, Video, Einstellungen oder die Startseite offen sind
 window.addEventListener('keydown', (e) => {
   if (!project || e.ctrlKey || e.altKey || e.metaKey || e.repeat || settings.isOpen || help.isOpen || !$('start').hidden) return;
-  if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
+  if ((e.target as HTMLElement | null)?.closest?.('#code-view, input, textarea, select, [contenteditable=true]')) return;
   if (markup.active || !$('videoview').hidden) return;
   const k = e.key.toLowerCase();
   if (k === 'h' && e.shiftKey) selectionAction('showAll');
@@ -1082,9 +1064,11 @@ async function loadModel(): Promise<void> {
   try {
     const [mapText, glb] = await Promise.all([api.fs.readText('.soma/model.map.json'), api.fs.readBinary('.soma/model.glb')]);
     if (seq !== loadSeq) return; // neuerer Build ist schon unterwegs
-    map = JSON.parse(mapText) as ModelMap;
+    const nextMap = JSON.parse(mapText) as ModelMap;
+    await viewer.load(glb, () => seq === loadSeq);
+    if (seq !== loadSeq) return;
+    map = nextMap;
     textCache.clear();
-    await viewer.load(glb);
     measureTool.reset(); // neuer Build: die Nummern der Flächen und Kanten gelten nicht mehr
     explodeTool.refresh(); // vor dem Schnitt: Dessen Bereich hängt von der Lage der Bauteile ab
     animTool.modelChanged(); // neue Bauteile: Lagen erneut anwenden, eine veraltete Animation neu bauen lassen
@@ -1100,6 +1084,7 @@ async function loadModel(): Promise<void> {
     void renderErrorCard();
     scheduleThumb();
   } catch (e) {
+    if (seq !== loadSeq) return;
     msg.className = 'error';
     msg.textContent = `The model could not be loaded: ${e instanceof Error ? e.message : String(e)}`;
   }
@@ -1138,13 +1123,14 @@ const versions = new VersionsBar({
  * Modell und gehen aus, Messen, Explosion und Schnitt fangen auf dem neuen Bild von vorn an.
  */
 async function showForeign(glb: ArrayBuffer, m: ModelMap, what: string): Promise<void> {
-  loadSeq++; // ein noch laufendes Laden des Modells soll das Bild nicht überschreiben
+  const seq = ++loadSeq; // The preview replaces any model still loading.
   animTool.setActive(false);
   resultTool.setActive(false);
   try {
+    await viewer.load(glb, () => seq === loadSeq);
+    if (seq !== loadSeq) return;
     map = m;
     textCache.clear();
-    await viewer.load(glb);
     measureTool.reset();
     explodeTool.refresh();
     sectionTool.refresh();
@@ -1172,9 +1158,8 @@ const fileView = new FileView({
 // ---- Projekt ----------------------------------------------------------------------------------------------------
 
 async function onProject(p: ProjectInfo): Promise<void> {
+  review.close();
   project = p;
-  // Ein anderes Modell geöffnet (Menü, Startseite): Die Tour gehört zum Tutorial-Modell und endet
-  if (tour.active && p.id !== tourProject) tour.stop(false, false);
   loadSeq++; // laufende Ladevorgänge des vorherigen Projekts verwerfen
   map = null;
   lastOkAt = null;
@@ -1190,7 +1175,6 @@ async function onProject(p: ProjectInfo): Promise<void> {
   versions.reset();
   fileView.drop();
   tree.setTitle(p.name);
-  terminals.closeAll();
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
@@ -1207,7 +1191,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   void renderSelection();
   tree.message('Building the model …');
   $('doc-name').textContent = p.name;
-  document.title = `SOMA – ${p.name}`;
+  document.title = `${APP_NAME} – ${p.name}`;
   $<HTMLInputElement>('chk-auto').checked = p.autoBuild;
   renderAuto();
   showProblems(p.problems);
@@ -1215,8 +1199,6 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (panel === 'files') void refreshFiles();
   void versions.refresh();
   void refreshSaveState();
-  void terminals.add({ title: 'Terminal' });
-  void refreshAgents();
   const st = await api.build.status();
   renderBuild(st);
   if (st.state === 'ok') void loadModel();
@@ -1228,10 +1210,6 @@ function showProblems(problems: string[]): void {
   b.replaceChildren(icon('alert', 14, 2), `${problems.length} issue${problems.length === 1 ? '' : 's'}`);
   b.title = problems.join('\n');
   $('problem-list').replaceChildren(...problems.map((p) => el('div', { className: 'problem' }, el('span', { className: 'pi' }, icon('alert', 16)), el('span', { textContent: p }))));
-}
-
-async function refreshAgents(): Promise<void> {
-  try { agents = await api.agents.detect(); } catch { agents = []; }
 }
 
 // ---- Speichern und Öffnen ---------------------------------------------------------------------------------------
@@ -1250,7 +1228,7 @@ function renderSaveState(st: SaveState): void {
   b.replaceChildren(dot, text);
   b.title = project?.folder ? `Folder: ${project.dir}\nChanges are saved in the folder itself.` : st.zipPath ? `File: ${st.zipPath}` : 'Not saved yet. Ctrl+S saves.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
-  document.title = `SOMA – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
+  document.title = `${APP_NAME} – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
 
 async function refreshSaveState(): Promise<void> {
@@ -1386,18 +1364,17 @@ const openProject = async (id: string) => {
   await api.project.open(id).catch((e: unknown) => toast(String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error'));
 };
 
-// F3 klappt den Strukturbaum auf und zu wie in CATIA (E82, Vorschlag aus dem Entwurf). Nicht beim Schreiben in Code, Terminal oder Feldern
+// F3 klappt den Strukturbaum auf und zu wie in CATIA (E82, Vorschlag aus dem Entwurf). Nicht beim Schreiben in Code oder Feldern
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'F3' || e.ctrlKey || e.altKey || e.shiftKey || !project || settings.isOpen || help.isOpen || !$('start').hidden) return;
-  if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
+  if ((e.target as HTMLElement | null)?.closest?.('#code-view, input, textarea, select, [contenteditable=true]')) return;
   e.preventDefault();
   tree.setOpen(!tree.isOpen);
 });
 
-// Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
   // Die Einstellungen liegen über allem und haben eigene Kurzbefehle (Strg+S speichert den Skill), die Hilfe ebenso
-  if (settings.isOpen || help.isOpen || (e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
+  if (settings.isOpen || help.isOpen || document.querySelector('.review-dialog[open]') || !e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   // Ohne offenes Modell (Startseite beim Start, E69) gibt es nur Neu und Öffnen
   if (!project && k !== 'n' && k !== 'o') return;
@@ -1408,7 +1385,6 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'b' && !e.shiftKey) { e.preventDefault(); void doBuild(); }
   else if (k === '1' && !e.shiftKey) { e.preventDefault(); toggleSide(); }
   else if (k === '2' && !e.shiftKey) { e.preventDefault(); showCode(!codeOpen); }
-  else if (k === '3' && !e.shiftKey) { e.preventDefault(); setAgentCollapsed(!$('terminals').classList.contains('collapsed')); }
 }, true);
 
 // ---- Menüs der Kopfzeile ----------------------------------------------------------------------------------------
@@ -1436,7 +1412,7 @@ $('btn-start').addEventListener('click', () => showStart(true));
 $('btn-home').addEventListener('click', () => showStart(true));
 // Versionsnummer (E68): neben dem Namen auf der Startseite und im Hinweis des Logos
 $('start-version').textContent = SOMA_VERSION;
-$('btn-home').title = `Start page · SOMA ${SOMA_VERSION}`;
+$('btn-home').title = `Start page · ${APP_NAME} ${SOMA_VERSION}`;
 $('problems').addEventListener('click', () => menus.toggle($('menu-problems'), $('problems')));
 
 // Build
@@ -1689,8 +1665,8 @@ $('btn-sel-code').addEventListener('click', () => {
   const e = selection ? partEntry(selection.partId) : undefined;
   if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(e.id)?.color });
 });
-$('btn-sel-agent').addEventListener('click', () => insertToAgent(selectionText()));
-$('btn-err-agent').addEventListener('click', () => insertToAgent(errorText()));
+$('btn-sel-comment').addEventListener('click', () => addComment(selectionText()));
+$('btn-err-comment').addEventListener('click', () => addComment(errorText(), null));
 $('btn-err-code').addEventListener('click', () => {
   const e = buildStatus.result?.error;
   if (e?.file) void openCode(e.file, e.line ? { from: e.line, to: e.line, label: 'Build error', kind: 'er' } : undefined);
@@ -1716,40 +1692,7 @@ document.querySelectorAll<HTMLButtonElement>('.side-close').forEach((b) => b.add
 const toggleSide = () => showPanel(panel ? null : lastPanel);
 $('btn-lay-side').addEventListener('click', toggleSide);
 $('btn-lay-code').addEventListener('click', () => showCode(!codeOpen));
-$('btn-lay-agent').addEventListener('click', () => setAgentCollapsed(!$('terminals').classList.contains('collapsed')));
 $('btn-code-close').addEventListener('click', () => showCode(false));
-
-// ---- Agent-Bereich ----------------------------------------------------------------------------------------------
-
-function setAgentCollapsed(on: boolean): void {
-  $('terminals').classList.toggle('collapsed', on);
-  $('agent-strip').hidden = !on;
-  $('split-right').hidden = on;
-  if (!on) terminals.refit();
-  store.set('soma.agentCollapsed', on ? '1' : '0');
-  renderLayout();
-}
-$('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
-terminals.onStripClick = () => setAgentCollapsed(false);
-
-function renderAgentMenu(): void {
-  $('agent-list').replaceChildren(...(agents.length ? agents : []).map((a) => {
-    const d = el('span', { className: 'dot' });
-    d.style.background = a.found ? 'var(--ok)' : 'transparent';
-    if (!a.found) d.style.boxShadow = 'inset 0 0 0 1.5px var(--tx3)';
-    const b = el('button', { className: 'mi', disabled: !a.found, title: a.found ? `Start ${a.command} in a new tab` : `${a.command} was not found in the PATH. Install the agent yourself, then it appears here.` },
-      el('span', { className: 'noico' }, d), el('span', { textContent: a.label }), a.found ? null : el('span', { className: 'k', textContent: 'not installed' }));
-    b.setAttribute('role', 'menuitem');
-    b.addEventListener('click', () => { setAgentCollapsed(false); void terminals.add({ command: a.command, title: a.label }); });
-    return b;
-  }));
-  if (!agents.length) $('agent-list').append(el('div', { className: 'mnote', textContent: 'Looking for agents …' }));
-}
-$('btn-term-add').addEventListener('click', () => { renderAgentMenu(); menus.toggle($('menu-agents'), $('btn-term-add')); });
-$('btn-term-plain').addEventListener('click', () => void terminals.add({ title: 'Terminal' }));
-$('btn-copy-path').addEventListener('click', () => void api.project.copyPath().then((r) => {
-  toast(r.ok ? 'Path copied. Open it as the project folder in your agent app.' : r.error ?? 'The path could not be copied.', r.ok ? 'ok' : 'error');
-}));
 
 // ---- Trennleisten -----------------------------------------------------------------------------------------------
 
@@ -1768,7 +1711,6 @@ function splitter(id: string, target: () => HTMLElement, prop: () => string, sig
 }
 splitter('split-side', () => $('side'), () => '--side', 1, 200, () => innerWidth * 0.4);
 splitter('split-code', () => $('editor'), () => '--editor', 1, 280, () => innerWidth * 0.6);
-splitter('split-right', () => $('terminals'), () => '--right', -1, 300, () => innerWidth - 560);
 
 // ---- Startseite -------------------------------------------------------------------------------------------------
 
@@ -1778,15 +1720,12 @@ async function showStart(on: boolean): Promise<void> {
   menus.close();
   $('btn-start-close').hidden = $('start-close-sep').hidden = !project;
   $('start-close-name').textContent = project?.name ?? '';
-  renderStartNote();
-  renderTourCard();
-  void renderUpdate();
   let list: ProjectListEntry[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
   // Ohne Modelle zeigen zwei große Karten den Weg, mit Modellen ist Zuletzt geöffnet der Hauptinhalt
   $('start-recent-wrap').hidden = !list.length;
-  $('start-empty').hidden = $('start-tip').hidden = !!list.length;
+  $('start-empty').hidden = !!list.length;
   $('start-recent-count').textContent = String(list.length);
   ($('start-filter') as HTMLInputElement).value = '';
   $('start-recent').replaceChildren(...list.map((p) => {
@@ -1816,26 +1755,6 @@ async function showStart(on: boolean): Promise<void> {
     item.append(rm);
     return item;
   }), el('div', { id: 'start-nomatch', className: 'c3', textContent: 'No model matches the filter.', hidden: true }));
-  if (!agents.length) await refreshAgents();
-  renderStartAgents();
-}
-
-/** Agenten kompakt: gefundene zuerst, je eine Zeile mit Punkt wie im Agent-Menü. Jeder andere CLI-Agent geht auch (Zeile darunter). */
-function renderStartAgents(): void {
-  const list = [...agents.filter((a) => a.found), ...agents.filter((a) => !a.found)];
-  $('start-agents-count').textContent = agents.length ? `${agents.filter((a) => a.found).length} of ${agents.length} found` : '';
-  $('start-agents').replaceChildren(...list.map((a) => el('div', {
-    className: 'agrow' + (a.found ? '' : ' off'),
-    title: a.found ? `Found in the PATH as ${a.command}` : `${a.command} was not found in the PATH. Install the agent yourself, then it appears here.`,
-  }, el('span', { className: 'dot' }), el('span', { className: 'nm', textContent: a.label }),
-  a.found ? el('code', { textContent: a.command }) : el('span', { className: 'st', textContent: 'not installed' }))));
-}
-
-/** Sicherheitshinweis bei den Agenten: bis „Got it“ ausführlich, danach eine Zeile. */
-function renderStartNote(): void {
-  const seen = store.get('soma.noteSeen') === '1';
-  $('start-note').hidden = seen;
-  $('start-note-line').hidden = !seen;
 }
 
 /** Filter über die Namen der Karten. Escape im Feld leert es zuerst, erst das nächste Escape verlässt die Startseite. */
@@ -1871,41 +1790,6 @@ $('start-new-more').addEventListener('click', () => menus.toggle($('menu-start-n
 $('start-new-cq').addEventListener('click', () => void doNewFromCadQuery());
 $('start-empty-cq').addEventListener('click', () => void doNewFromCadQuery());
 $('start-open-folder').addEventListener('click', () => { menus.close(); void doOpenFolder().then((ok) => { if (ok) showStart(false); }); });
-$('btn-start-tip-help').addEventListener('click', () => void help.open());
-/**
- * Pille „neue Version“ neben der Versionsnummer: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Ein
- * Klick öffnet die Seite im Browser, laden und installieren tut der Nutzer selbst. Bei aktuellem Stand keine Pille, klappt die
- * Prüfung nicht, eine leise. Ausgeschaltet (Settings › About) oder im Test ohne Adresse: keine.
- */
-let updateInfo: UpdateInfo | null = null;
-async function renderUpdate(): Promise<void> {
-  const pill = $('start-update');
-  if (!appSettings.settings.start.updateCheck) { pill.hidden = true; return; }
-  if (!updateInfo) { pill.hidden = true; pill.className = 'uppill checking'; }
-  try { updateInfo = await api.updates.check(); } catch (e) {
-    updateInfo = { state: 'error', current: SOMA_VERSION, url: RELEASES_URL, error: e instanceof Error ? e.message : String(e) };
-  }
-  const u = updateInfo;
-  if (!appSettings.settings.start.updateCheck || u.state === 'skipped') { pill.hidden = true; return; }
-  const when = u.published ? ` on ${new Date(u.published).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
-  const [ico, label, title] = u.state === 'newer'
-    ? ['arrowup', `${u.latest} available`, `SOMA ${u.latest} was released${when}. You have ${u.current}. Opens the release page: download and install it there, your models stay.`]
-    : u.state === 'current'
-      ? ['okcirc', 'Up to date', `SOMA is up to date. ${u.current} is the latest release on GitHub.`]
-      : ['alert', 'Update check failed', `Could not check for a new version. ${u.error ?? ''}`.trim()];
-  pill.className = `uppill ${u.state}`;
-  pill.title = title;
-  pill.dataset.url = u.url;
-  pill.replaceChildren(icon(ico, 12, 2.2), el('span', { textContent: label }));
-  pill.hidden = u.state === 'current';
-}
-$('start-update').addEventListener('click', () => {
-  const url = $('start-update').dataset.url ?? RELEASES_URL;
-  void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); });
-});
-const RELEASES_URL = 'https://github.com/Kai-Jungsthoefel/SOMA/releases';
-$('btn-note-ok').addEventListener('click', () => { store.set('soma.noteSeen', '1'); renderStartNote(); });
-
 // ---- Ereignisse vom Hauptprozess --------------------------------------------------------------------------------
 
 api.project.onChanged((p) => void onProject(p));
@@ -1934,8 +1818,8 @@ api.drawings.onChanged(() => { drawingsView()?.refresh(); scheduleViewLists(); }
 api.render.onProgress((f) => animTool.progress(f));
 // Bilder und Videos, die der Agent erzeugt hat: kurz Bescheid geben, ein Klick im Dateibaum öffnet sie
 api.render.onNotice((n) => {
-  if (!n.byAgent) return;
-  if (n.ok) toast(`The agent created ${n.files.join(', ')}.`, 'info');
+  if (!n.fromCli) return;
+  if (n.ok) toast(`Rendered ${n.files.join(', ')}.`, 'info');
   void refreshFiles();
   scheduleViewLists();
 });
@@ -1946,87 +1830,8 @@ api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (Startseite, Menü, im Testmodus öffnet es der Hauptprozess beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
 // Einstellungen der App (E81): Ein Modell, das schon offen ist, bekommt auch die Darstellung beim Öffnen
-void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); renderTourCard(); }).catch(() => { /* es gelten die Vorgaben */ });
+void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); }).catch(() => { /* es gelten die Vorgaben */ });
 
-// ---- Tutorial (E94) ---------------------------------------------------------------------------------------------
-// Erst hier angelegt: Seine Escape-Taste kommt nach Menüs, Messen und Markierung, die Escape zuerst für sich nutzen
-
-const tourCtx: TourContext = {
-  showPanel: (p) => showPanel(p),
-  showCode: (on) => showCode(on),
-  openCode: (f) => void openCode(f),
-  expandAgent: () => setAgentCollapsed(false),
-  // Die Liste nennt alle bekannten Agenten mit „found“. Leer heißt: Suche läuft noch
-  agentsFound: () => (agents.length ? agents.filter((a) => a.found).map((a) => a.label) : null),
-  selected: () => !!selection,
-  measuring: () => measureTool.isActive,
-  stopMeasure: () => { if (measureTool.isActive) measureTool.setActive(false); },
-  marking: () => markup.active,
-  closeEmptyMarkup: () => { if (markup.active && !markup.drawn) markup.close(); },
-  // Läuft in jedem Frame: nur nachsehen, ob eine Zeile als geändert markiert ist (state() misst den ganzen Text)
-  paramsChanged: () => !!document.querySelector('#params-list .prm.chg'),
-};
-/** Modell, zu dem die laufende Tour gehört. */
-let tourProject: string | null = null;
-const tour = new Tour({
-  covered: () => !$('start').hidden || help.isOpen || settings.isOpen,
-  // Durchlaufen blendet die Karte der Startseite aus (wie „Got it“), Überspringen nicht: Wer abbricht, findet sie dort wieder
-  ended: (finished) => {
-    if (finished) void hideTourCard();
-    toast(finished ? 'That’s the basics. Help (F1) has the whole guide and can start the tutorial again.' : 'Tutorial ended. Help (F1) can start it again.', 'info');
-  },
-});
-
-function renderTourCard(): void {
-  $('start-tour').hidden = !appSettings.settings.start.tutorialCard;
-}
-
-/** Karte „New to SOMA?“ dauerhaft ausblenden (settings.json). Klappt das Schreiben nicht, bleibt sie für diese Sitzung weg. */
-async function hideTourCard(): Promise<void> {
-  $('start-tour').hidden = true;
-  if (!appSettings.settings.start.tutorialCard) return;
-  try {
-    const r = await changeSettings({ start: { tutorialCard: false } });
-    if (!r.ok) toast(r.error ?? 'The setting could not be saved.', 'error');
-  } catch (e) { toast(`The setting could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
-  $('start-tour').hidden = true;
-}
-
-/**
- * Tutorial starten: Es legt wie „New model“ ein neues Modell aus der Vorlage an, nur mit dem Namen „Tutorial“, und führt
- * daran durch die Oberfläche. Ein offenes Modell bleibt, wie es ist (unter Recent), nach einer Rückfrage, weil seine
- * Terminals dabei schließen. Bleibt das Tutorial-Modell unverändert, verschwindet es beim Wechsel wie jedes neue (E69).
- */
-async function startTutorial(): Promise<void> {
-  if (project) {
-    const c = await api.dialog.choose({
-      title: 'Tutorial', message: 'Start the tutorial with a new example model?',
-      detail: `Your model “${project.name}” stays on the start page under Recent. Its terminals close.`, buttons: ['Start tutorial', 'Cancel'],
-    });
-    if (c !== 0) return;
-  }
-  if (!(await leaveEditor('Start tutorial'))) return;
-  help.close();
-  tour.stop(false, false);
-  void showStart(false);
-  let info: ProjectInfo;
-  try { info = await api.project.create('tutorial'); } catch (e) {
-    toast(`The example model could not be created: ${e instanceof Error ? e.message : String(e)}`, 'error');
-    return;
-  }
-  tourProject = info.id;
-  tour.start(tourSteps(tourCtx));
-}
-$('btn-tour-start').addEventListener('click', () => void startTutorial());
-$('btn-tour-dismiss').addEventListener('click', () => void hideTourCard());
-$('btn-help-tour').addEventListener('click', () => void startTutorial());
-// Video-Tutorial auf YouTube: nur ein Link, der im Browser öffnet (kein eingebettetes Video: Netz und Datenschutz)
-const TUTORIAL_VIDEO = 'https://www.youtube.com/watch?v=FJrgMl8ZGKI';
-const openVideo = (): void => { void api.openUrl(TUTORIAL_VIDEO).then((r) => { if (!r.ok) toast(r.error ?? `${TUTORIAL_VIDEO} could not be opened.`, 'error'); }); };
-$('btn-tour-video').addEventListener('click', openVideo);
-$('btn-help-video').addEventListener('click', openVideo);
-
-if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Seitenleiste wie beim letzten Mal, beim ersten Start zu: Die Bauteile stehen im Baum im Viewer (E82)
 {
   const side = store.get('soma.side');
@@ -2047,7 +1852,7 @@ requestAnimationFrame(() => hideBoot());
 // Prüfschnittstelle, nur im Testmodus
 if (api.testMode) {
   (window as unknown as Record<string, unknown>).__t = {
-    viewer, terminals,
+    viewer,
     project: () => project,
     parts: () => viewer.partList(),
     partCount: () => viewer.partList().length,
@@ -2059,7 +1864,6 @@ if (api.testMode) {
     treeOpen: (on: boolean) => tree.setOpen(on),
     picked: () => picked.map(partName),
     treeExpandAll: () => tree.expandAll(),
-    termText: (id: number) => terminals.text(id),
     versions: () => versions.state(),
     saveState: () => saveState,
     toast: () => ({ text: $('toast').textContent, hidden: $('toast').hidden, error: $('toast').classList.contains('error') }),
@@ -2106,10 +1910,9 @@ if (api.testMode) {
     markHandles: () => markup.handles(),
     markRelayout: () => markup.relayout(),
     markImage: (rel: string) => markImage(rel),
-    insert: (text: string) => insertToAgent(text),
     showPanel: (p: PanelName | 'code' | null) => (p === 'code' ? showCode(true) : showPanel(p)),
     showCode,
-    layout: () => ({ side: panel, code: codeOpen, agent: !$('terminals').classList.contains('collapsed') }),
+    layout: () => ({ side: panel, code: codeOpen }),
     refreshViewLists: () => refreshViewLists(),
     openSkill: (id: string | null) => skills.openDetail(id),
     help: () => help.state(),
@@ -2136,9 +1939,6 @@ if (api.testMode) {
     newFromCadQuery: () => doNewFromCadQuery(),
     cqBusy: () => ({ hidden: $('app-busy').hidden, text: $('app-busy').textContent }),
     showStart: (on: boolean) => showStart(on),
-    tour: () => tour.state(),
-    tourGo: (n: number) => tour.goTo(n),
-    setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),
     revealFile: (rel: string) => files.reveal(rel, false),
     codeText: () => code.text(),

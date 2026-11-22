@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 import { exec } from 'dugite';
-import type { AboutInfo, AgentInfo, ComponentInfo } from '../shared/types';
-import { SOMA_VERSION } from '../shared/version';
+import type { AboutInfo, ComponentInfo } from '../shared/types';
+import { APP_NAME, SOMA_VERSION } from '../shared/version';
 import { logTail } from './log';
 import { logsDir, pythonEnv, pythonExe, userDataDir, userSkillsDir, warmDir } from './paths';
 
 /**
- * Angaben für „About“ in den Einstellungen (E81): Versionen, Komponenten mit Lizenz, gefundene Agenten, Pfade. Alles wird
+ * Angaben für „About“ in den Einstellungen (E81): Versionen, Komponenten mit Lizenz, Pfade. Alles wird
  * gelesen, nichts geschätzt: npm-Pakete aus components.json (beim Bauen aus node_modules geschrieben), Python-Pakete aus
  * ihren Metadaten. Fehlt etwas, steht das dort, statt dass die Seite scheitert.
  */
@@ -113,13 +113,13 @@ export function osName(): string {
   return `${os.type()} ${rel}`;
 }
 
-export async function aboutInfo(agents: () => Promise<AgentInfo[]>): Promise<AboutInfo> {
-  const [python, git, found] = await Promise.all([pythonInfo(), gitVersion(), agents().catch(() => [])]);
+export async function aboutInfo(): Promise<AboutInfo> {
+  const [python, git] = await Promise.all([pythonInfo(), gitVersion()]);
   return {
     version: SOMA_VERSION,
     electron: process.versions.electron ?? '', chrome: process.versions.chrome ?? '', node: process.versions.node,
     os: `${osName()} ${process.arch}`,
-    git, python, agents: found,
+    git, python,
     paths: [
       { label: 'App data', path: userDataDir() },
       { label: 'Your skills', path: userSkillsDir() },
@@ -135,11 +135,10 @@ export async function aboutInfo(agents: () => Promise<AgentInfo[]>): Promise<Abo
 export function aboutText(a: AboutInfo): string {
   const pkg = (n: string) => a.python.packages.find((p) => p.name.toLowerCase() === n)?.version;
   const lines = [
-    `SOMA ${a.version}`,
+    `${APP_NAME} ${a.version}`,
     `soma (Python) ${pkg('soma') ?? 'not found'}, Python ${a.python.version ?? 'not found'}, CadQuery ${pkg('cadquery') ?? '?'}, OCP ${pkg('cadquery-ocp') ?? '?'}`,
     `Electron ${a.electron}, Chromium ${a.chrome}, Node.js ${a.node}, Git ${a.git ?? 'not found'}`,
     `OS: ${a.os}`,
-    `Agents: ${a.agents.map((x) => `${x.label} (${x.found ? 'found' : 'not installed'})`).join(', ') || 'none detected'}`,
     ...a.paths.map((p) => `${p.label}: ${p.path}`),
   ];
   if (a.python.error) lines.push(`Python problem: ${a.python.error}`);

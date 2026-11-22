@@ -32,9 +32,6 @@ try {
   const dir = proj.dir;
   const g = async (...args) => (await exec(args, dir)).stdout.trim();
   const modelPy = path.join(dir, 'model.py');
-  const term = () => ev(() => window.__t.terminals.activeId);
-  const type = async (cmd) => { const id = await term(); await ev(([i, c]) => window.soma.term.write(i, c + '\r'), [id, cmd]); };
-  const termText = async () => ev((i) => window.__t.termText(i), await term());
   const zipPath = path.join(workDir, 'Testmodell.soma');
   const versions = () => ev(() => window.__t.versions());
   const saveState = () => ev(() => window.__t.saveState());
@@ -42,17 +39,13 @@ try {
   const cached = (hash) => path.join(ud, 'previews', proj.id, hash);
   const until = async (fn, ms = 15000) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < ms) await sleep(200); return fn(); };
 
-  // ---- 1) Neues Projekt hat einen Git-Verlauf, mitgeliefertes Git im Terminal ----
+  // ---- 1) Neues Projekt hat einen Git-Verlauf ----
   await waitFor('Verlauf geladen', () => window.__t.versions().count === 1);
   check('Neues Projekt: Git-Repository mit Startcommit', (await g('log', '--format=%s')) === 'New model created');
   check('Startcommit enthält output/model.step (Vorschau des ersten Standes möglich)', (await g('ls-files', 'output/model.step')) === 'output/model.step');
   check('Nach dem ersten Build gilt der Stand als sauber (output/ zählt nicht)', (await versions()).dirtyFiles === 0);
   check('Git-Identität ist gesetzt (Agent kann committen)', (await g('config', 'user.name')).length > 0 && (await g('config', 'user.email')).length > 0);
   check('Zeilenenden werden nicht umgewandelt (autocrlf aus)', (await g('config', 'core.autocrlf')) === 'false');
-  await type('git --version');
-  await waitFor('git im Terminal', (i) => /git version 2\.\d+/.test(window.__t.termText(i)), 20000, await term());
-  check('Im Terminal läuft das mitgelieferte Git (2.53)', /git version 2\.53/.test(await termText()), (await termText()).match(/git version [\d.]+\S*/)?.[0] ?? '');
-
   // ---- 2) Agent committet selbst ----
   const src = fs.readFileSync(modelPy, 'utf8');
   fs.writeFileSync(modelPy, src.replace('LENGTH = param(60.0', 'LENGTH = param(80.0'));
@@ -60,7 +53,8 @@ try {
   check('Änderung am Modell erscheint im Viewer (Body 80 mm lang)', (await ev(() => window.__t.partSize('Body')))[0] === 80);
   await waitFor('ungesicherte Änderung', () => window.__t.versions().dirtyFiles === 1);
   check('Ungesicherte Änderung wird angezeigt (1 Datei)', true);
-  await type('git add -A; git commit -q -m "Laenge auf 80"');
+  await g('add', '-A');
+  await g('commit', '-q', '-m', 'Laenge auf 80');
   await waitFor('zweiter Stand im Verlauf', () => window.__t.versions().count === 2, 20000);
   check('Commit des Agenten erscheint in der Verlaufsleiste', (await versions()).subjects.includes('Laenge auf 80'));
   // Sauberer Arbeitsordner und aktueller Build: Der Build zeigt genau den neuen Commit und wird dessen Vorschau
@@ -145,11 +139,9 @@ try {
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 30000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
-  // Bis zur schließenden Klammer warten: Unter Last kommt das Echo der Shell stückweise
-  await waitFor('Markierung im Terminal', (i) => /\[Markup: \.soma\/feedback\/[^\]]*\]/.test(window.__t.termText(i)), 30000, await term()).catch(() => {});
-  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`shows the older version ${firstShort} "New model created"]`), (await termText()).match(/\[Markup:[^\]]*\]/)?.[0]?.slice(0, 200) ?? '');
+  const markupReference = await app.reviewReference();
+  check('Markup in a preview names the selected version', markupReference.includes(`shows the older version ${firstShort} "New model created"]`), markupReference);
   check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
-  await ev((i) => window.soma.term.write(i, '\x03'), await term()); // Zeile verwerfen
 
   // ---- 5) Wiederherstellen als neuer Commit ----
   await app.answers([0]);
@@ -172,7 +164,6 @@ try {
   fs.renameSync(path.join(dir, '.git'), path.join(dir, '.git_weg'));
   await waitFor('Problem gemeldet', () => window.__t.versions().problems.some((p) => p.includes('No Git history')), 20000);
   check('Ohne .git: Verlauf meldet das Problem verständlich', (await versions()).problems[0].includes('No Git history'), (await versions()).problems[0].slice(0, 50));
-  check('Ohne .git: App und Terminal laufen weiter', await ev(() => window.__t.terminals.count) === 1);
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nohne git geändert\n');
   await sleep(300);
   await app.domClick('btn-save');
@@ -280,8 +271,7 @@ try {
   const models = () => (fs.existsSync(wsDir) ? fs.readdirSync(wsDir).filter((n) => /^[0-9a-f-]{36}$/.test(n)) : []);
   check('Start auf der Startseite: kein Modell offen oder angelegt, nicht wegzuklicken', (await h.ev(() => window.__t.project())) === null && models().length === 0
     && await h.ev(() => document.getElementById('btn-start-close').hidden), `Modelle: ${models().length}`);
-  await h.waitFor('Agenten', () => document.querySelectorAll('#start-agents .agrow').length > 0, 15000).catch(() => {});
-  check('Startseite ohne offenes Modell nennt die Agenten', (await h.ev(() => document.querySelectorAll('#start-agents .agrow').length)) > 0);
+  check('The start page shows the viewer name', await h.ev(() => document.querySelector('#start .brand').textContent) === 'CAD Lab Viewer');
   await h.domClick('start-new');
   await h.waitFor('erstes neues Modell', () => !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000);
   const m1 = await h.ev(() => window.__t.project());

@@ -33,11 +33,9 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   // Nach einem harten Beenden kann ein Kindprozess der alten App den Debug-Port noch kurz halten (geerbter Socket):
   // warten, sonst startet Electron ohne Debug-Port und der Test findet kein Fenster
   for (const t0 = Date.now(); !(await portFree(port)) && Date.now() - t0 < 30000;) await sleep(300);
-  // SOMA_TEST_EXE: die gepackte App statt der Entwicklungsfassung (Prüfung der Auslieferung, siehe app/README.md)
-  const packaged = process.env.SOMA_TEST_EXE;
   // SOMA_TEST_ARGS: weitere Schalter für Electron, etwa --ignore-gpu-blocklist unter xvfb (CI)
   const extra = (process.env.SOMA_TEST_ARGS ?? '').split(' ').filter(Boolean);
-  const child = spawn(packaged || electronExe(APP), [...(packaged ? [] : ['.']), `--remote-debugging-port=${port}`, ...extra, ...appArgs], {
+  const child = spawn(electronExe(APP), ['.', `--remote-debugging-port=${port}`, ...extra, ...appArgs], {
     cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -46,8 +44,7 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   const kill = () => {
     if (process.platform !== 'win32') { child.kill('SIGKILL'); return; }
     if (spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }).status === 0) return;
-    // taskkill /T lässt den ganzen Baum stehen, sobald sich ein Kind nicht beenden lässt. Das passiert mit den kurzlebigen
-    // Hilfsprozessen von node-pty (entstehen beim Schließen eines Terminals). Und unter Last braucht der Hauptprozess nach
+    // taskkill /T can fail to stop a process tree when a child does not exit. The main process may also need time to exit.
     // dem Beenden teils viele Sekunden, bis er wirklich weg ist (etwa wenn App und Git auf einem Netzlaufwerk liegen). Solange hält er
     // Debug-Port und App-Daten fest, ein Neustart mit denselben Daten fände kein Fenster. Deshalb: Kinder einzeln beenden
     // (sie können den Port geerbt haben), dann den Hauptprozess, warten, bis er weg ist, und noch einmal die Kinder.
@@ -102,6 +99,15 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
       if (child.exitCode === null && child.signalCode === null) { kill(); throw new Error('Test app did not exit cleanly.'); }
       await sleep(600);
     },
+  };
+  app.reviewReference = async () => {
+    await app.waitFor('Comment reference', () => !!document.querySelector('.review-dialog[open] form .ask-detail'), 10000);
+    return ev(() => {
+      const dialog = document.querySelector('.review-dialog[open]');
+      const reference = dialog.querySelector('form .ask-detail').textContent;
+      dialog.querySelector('button[type=button]').click();
+      return reference;
+    });
   };
   return app;
 }

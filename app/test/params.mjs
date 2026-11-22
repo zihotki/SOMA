@@ -150,10 +150,10 @@ try {
   await waitFor('Code offen', () => window.__t.editor.state().file === 'model.py', 10000).catch(() => {});
   const es = await ev(() => window.__t.editor.state());
   check('Sprung in den Code: model.py, Zeile von LENGTH markiert', es.file === 'model.py' && es.marked.some((m) => m.includes('LENGTH = param(60.0')), es.marked.join(' | '));
-  await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
-  await clickText(`${row('LENGTH')} .lnk`, 'Send to agent');
-  check('„Send to agent": Wert, Wert im Code und Stelle', await ev(() => window.__inserted) === '[Parameter: "Length" (LENGTH) = 100 mm, set in the app, code default 60 mm, model.py line 10] ',
-    await ev(() => window.__inserted));
+  await clickText(`${row('LENGTH')} .lnk`, 'Add comment');
+  const parameterReference = await app.reviewReference();
+  check('The comment names the current value, the default and source line',
+    parameterReference === '[Parameter: "Length" (LENGTH) = 100 mm, set in the app, code default 60 mm, model.py line 10]', parameterReference);
   await ev(() => window.__t.showCode(false));
 
   // 5) Alle zurücksetzen: die Datei verschwindet, das Modell ist wieder das des Agenten
@@ -297,9 +297,9 @@ try {
   fs.writeFileSync(modelPy, 'import cadquery as cq\nfrom soma import add_part\n\nadd_part("Block", cq.Workplane("XY").box(10, 10, 10))\n');
   await waitFor('ohne Parameter', (b) => window.__t.buildStarts() > b && window.__t.status().state === 'ok' && window.__t.params().names?.length === 0, 60000, b0);
   s = await ps();
-  check('Ohne Parameter: leerer Zustand mit Erklärung, SIZE als Wert ohne Parameter', s.text.includes('This model has no parameters yet') && s.text.includes('Ask the agent') && s.text.includes('SIZE'));
-  await clickText('#params-list .pm-empty button', 'Ask the agent');
-  check('„Ask the agent" fügt die Bitte in die Eingabe ein', (await ev(() => window.__inserted)).startsWith('Make the main dimensions of the model adjustable with param()'));
+  check('Ohne Parameter: leerer Zustand mit Erklärung, SIZE als Wert ohne Parameter', s.text.includes('This model has no parameters yet') && s.text.includes('Add comment') && s.text.includes('SIZE'));
+  await clickText('#params-list .pm-empty button', 'Add comment');
+  check('„Add comment" fügt die Bitte in die Eingabe ein', (await app.reviewReference()).startsWith('Make the main dimensions of the model adjustable with param()'));
   await shot('params-5-empty');
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

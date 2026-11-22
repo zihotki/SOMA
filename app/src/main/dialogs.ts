@@ -24,11 +24,11 @@ export async function choosePath(win: BrowserWindow | null, kind: 'save' | 'open
   if (testMode()) return nextAnswer<string | null>(`${kind} path`);
   const defaultPath = path.isAbsolute(defaultName) ? defaultName : path.join(app.getPath('documents'), defaultName);
   if (kind === 'save') {
-    const filters = [{ name: 'SOMA model', extensions: ['soma'] }];
+    const filters = [{ name: 'CAD Lab model', extensions: ['soma'] }];
     const r = win ? await dialog.showSaveDialog(win, { title: 'Save model', defaultPath, filters }) : await dialog.showSaveDialog({ title: 'Save model', defaultPath, filters });
     return r.canceled || !r.filePath ? null : r.filePath;
   }
-  const filters = [{ name: 'SOMA model (.soma, .zip)', extensions: ['soma', 'zip'] }];
+  const filters = [{ name: 'CAD Lab model (.soma, .zip)', extensions: ['soma', 'zip'] }];
   const opts = { title: 'Open model', filters, properties: ['openFile' as const] };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];

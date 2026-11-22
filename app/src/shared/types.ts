@@ -1,3 +1,4 @@
+import type { ReviewApi } from './review';
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
 import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
 
@@ -126,7 +127,6 @@ export interface DxfResult { ok: boolean; sig?: string; unchanged?: boolean; gon
 
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
 
-export interface AgentInfo { id: string; label: string; command: string; found: boolean }
 
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
@@ -263,15 +263,6 @@ export interface StorageStats { dir: string; total: number; areas: StorageEntry[
 /** Vorschau-Cache leeren. `kept`: Die Vorschauen des offenen Modells blieben. `canceled`: Rückfrage abgelehnt. */
 export interface StorageClear { ok: boolean; canceled?: boolean; freed?: number; kept?: boolean; error?: string; stats?: StorageStats }
 
-/**
- * Neue Version unter GitHub Releases (Startseite). `skipped`: nicht gefragt (Test ohne Adresse). `url`: Seite der neuesten
- * Veröffentlichung, sonst die Liste aller.
- */
-export interface UpdateInfo {
-  state: 'newer' | 'current' | 'error' | 'skipped';
-  current: string; latest?: string; url: string; published?: string; error?: string;
-}
-
 /** Eine mitgelieferte Komponente: npm-Paket der App oder Python-Paket, das soma voraussetzt. Lizenz wie in ihren Metadaten. */
 export interface ComponentInfo { name: string; version: string; license: string }
 /** Angaben für „About“ in den Einstellungen (E81). */
@@ -280,7 +271,6 @@ export interface AboutInfo {
   /** Version des mitgelieferten Git (dugite), null wenn es nicht antwortet. */
   git: string | null;
   python: { exe: string; version?: string; packages: ComponentInfo[]; error?: string };
-  agents: AgentInfo[];
   paths: { label: string; path: string }[];
   components: ComponentInfo[];
 }
@@ -345,6 +335,7 @@ export interface DrawingDim {
 }
 export interface DrawingWarning { message: string; file: string | null; line: number | null; box?: number[] }
 export interface DrawingEntry {
+  build?: string;
   id: string; name: string; file: string | null; line: number | null;
   size: string; width: number; height: number; scale: string;
   pdf: string; dxf: string | null;
@@ -432,7 +423,7 @@ export interface RenderJob {
 export interface RenderOutput { ok: boolean; error?: string; warnings?: string[]; png?: ArrayBuffer; mp4?: ArrayBuffer; vtt?: string | null; sheet?: ArrayBuffer }
 export interface RenderResult { ok: boolean; files: string[]; warnings: string[]; error?: string }
 /** Meldung an das Hauptfenster: Bild oder Video fertig (auch auf Auftrag des Agenten). */
-export interface RenderNotice extends RenderResult { kind: 'still' | 'sheet' | 'video'; byAgent: boolean }
+export interface RenderNotice extends RenderResult { kind: 'still' | 'sheet' | 'video'; fromCli: boolean }
 
 export interface SomaApi {
   testMode: boolean;
@@ -440,8 +431,7 @@ export interface SomaApi {
   startsHome: boolean;
   project: {
     current(): Promise<ProjectInfo>;
-    /** Neues Modell aus der Vorlage. `tutorial` (E94): dieselbe Vorlage unter dem Namen „Tutorial“. */
-    create(kind?: 'tutorial'): Promise<ProjectInfo>;
+    create(): Promise<ProjectInfo>;
     list(): Promise<ProjectListEntry[]>;
     open(id: string): Promise<ProjectInfo>;
     onChanged(cb: (p: ProjectInfo) => void): void;
@@ -464,8 +454,6 @@ export interface SomaApi {
     onSaveState(cb: (s: SaveState) => void): void;
     /** Zeigt die Modelldatei im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
     reveal(): Promise<void>;
-    /** Pfad des Arbeitsordners in die Zwischenablage, für Agenten-Apps außerhalb der App (Claude Desktop, Codex-App). */
-    copyPath(): Promise<FileOpResult>;
     /** Vorschaubild des offenen Modells für die Startseite (JPEG als Data-URL). */
     setThumb(dataUrl: string): Promise<void>;
     thumb(id: string): Promise<string | null>;
@@ -531,15 +519,7 @@ export interface SomaApi {
   };
   /** DXF-Ansicht im Code-Panel (E80). `known`: Fingerabdruck des gezeigten Stands, bei gleicher Datei kommt nur `unchanged`. */
   dxf: { view(rel: string, known?: string | null): Promise<DxfResult> };
-  term: {
-    create(opts?: { command?: string; title?: string }): Promise<number>;
-    write(id: number, data: string): void;
-    resize(id: number, cols: number, rows: number): void;
-    kill(id: number): void;
-    onData(cb: (id: number, data: string) => void): void;
-    onExit(cb: (id: number, code: number) => void): void;
-  };
-  agents: { detect(): Promise<AgentInfo[]> };
+  review: ReviewApi;
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {
     query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse>;
@@ -599,8 +579,6 @@ export interface SomaApi {
   /** Der Viewer bekam keinen WebGL-Kontext. true: Die App startet mit Software-Rendering neu (nur Linux, einmal). */
   gpu: { webglFailed(): Promise<boolean> };
   about: { info(): Promise<AboutInfo>; copy(): Promise<FileOpResult> };
-  /** Neueste Version auf GitHub, einmal je Sitzung gefragt. */
-  updates: { check(): Promise<UpdateInfo> };
   /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
   anim: {
     list(): Promise<AnimList>;
@@ -640,8 +618,6 @@ export interface SomaApi {
   };
   /** Öffnet eine Web-Adresse (http, https, mailto) im Browser des Systems. Andere Adressen lehnt der Hauptprozess ab. */
   openUrl(url: string): Promise<FileOpResult>;
-  /** Text in die Zwischenablage (etwa „Send to agent“ für Agenten-Apps außerhalb der App). */
-  copyText(text: string): Promise<FileOpResult>;
 }
 
 /** Schnittstelle des unsichtbaren Render-Fensters (E58, render-preload.ts). */

@@ -1,5 +1,4 @@
-"""Erzeugt das App-Icon von SOMA (E44): resources/icon.svg (Vorlage), icon.png (256 px) und icon.ico (16 bis 256 px),
-dazu build-resources/icon.png (1024 px) für die Installationspakete von macOS und Linux (electron-builder.config.cjs).
+"""Erzeugt das App-Icon von SOMA (E44): resources/icon.svg (Vorlage), icon.png (256 px) und icon.ico (16 bis 256 px).
 
 Das Zeichen ist der Würfel als Sprechblase mit orangem Deckel auf einer Graphit-Fläche. Kleine Größen bekommen einen
 dickeren Strich und ein größeres Zeichen, sonst verschwimmt es bei 16 px. Gerastert wird mit Edge ohne Fenster
@@ -15,8 +14,6 @@ import tempfile
 from PIL import Image
 
 RES = pathlib.Path(__file__).resolve().parent.parent / "resources"
-BUILD_RES = RES.parent / "build-resources"
-LARGE = 1024
 EDGE = os.environ.get("EDGE", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 SIZES = [256, 128, 64, 48, 40, 32, 24, 20, 16]
 
@@ -68,18 +65,6 @@ def main():
     assert images[0].getpixel((0, 0))[3] == 0, "Hintergrund ist nicht transparent"
     images[0].save(RES / "icon.png")
     images[0].save(RES / "icon.ico", sizes=[(s, s) for s in SIZES], append_images=images[1:])
-    # Große Fassung einzeln gezeichnet (Strich wie bei 256 px), macOS und Linux skalieren daraus herunter
-    with tempfile.TemporaryDirectory() as tmp:
-        page, shot = pathlib.Path(tmp) / "large.html", pathlib.Path(tmp) / "large.png"
-        page.write_text(f'<!doctype html><html><head><meta charset="utf-8"><style>html,body{{margin:0;background:transparent}}svg{{display:block}}</style></head><body>{svg(LARGE)}</body></html>', encoding="utf-8")
-        subprocess.run([EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
-                        "--default-background-color=00000000", f"--window-size={LARGE},{LARGE}",
-                        f"--screenshot={shot}", page.as_uri()], check=True, capture_output=True)
-        large = Image.open(shot).convert("RGBA").crop((0, 0, LARGE, LARGE))
-    assert large.getpixel((0, 0))[3] == 0, "Hintergrund ist nicht transparent"
-    BUILD_RES.mkdir(exist_ok=True)
-    large.save(BUILD_RES / "icon.png")
-    print("geschrieben:", ", ".join(f"icon.{e}" for e in ("svg", "png", "ico")), "in", RES, "und icon.png in", BUILD_RES)
 
 
 if __name__ == "__main__":

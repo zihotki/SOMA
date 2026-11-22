@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/version';
 import { DECIMALS, NAV_PRESETS, navLegend, type NavPreset, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
 import type { AboutInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
 import { icon } from './icons';
@@ -114,7 +115,7 @@ export class ViewerPage implements SettingsPage {
         field('Origin and axes', 'The display menu in the viewer changes these for the open model, until the next one opens.',
           toggle('st-axes', v.axes, 'Origin and axes', (on) => void this.change({ axes: on })))),
       group('Measurements',
-        field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Text sent to the agent always has three decimals.`, digits)),
+        field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Measurement references use three decimal places.`, digits)),
     ));
   }
 
@@ -144,7 +145,7 @@ export class ShortcutsPage implements SettingsPage {
     const groups = shortcutGroups(nav).map((g) => group(g.title, ...g.items.map((it) => el('div', { className: 'st-key' },
       el('span', { className: 'st-kk' }, ...it.keys.flatMap((k, i) => [i ? el('span', { className: 'plus', textContent: '+' }) : null, el('kbd', { textContent: k })])),
       el('span', { className: 'st-kw', textContent: it.what })))));
-    this.root.replaceChildren(...head('Shortcuts', `Keys and mouse gestures of SOMA. Not active while you type in the code, the terminal or a field. Navigation as set under Viewer (${NAV_PRESETS.find((p) => p.id === nav)?.label ?? nav}).`), ...groups);
+    this.root.replaceChildren(...head('Shortcuts', `Keyboard and mouse shortcuts. Navigation preset (${NAV_PRESETS.find((p) => p.id === nav)?.label ?? nav}).`), ...groups);
   }
 }
 
@@ -235,11 +236,9 @@ export class StoragePage implements SettingsPage {
 
 interface AboutDeps {
   api: SomaApi['about']; openUrl(url: string): void; openFolder(area: StorageArea): void; toast: Toast;
-  /** Einstellung „Check for new versions“ (Karte auf der Startseite). */
-  updateCheck(): boolean; setUpdateCheck(on: boolean): Promise<SettingsResult>;
 }
 
-const REPO = 'https://github.com/Kai-Jungsthoefel/SOMA';
+const REPO = 'https://github.com/zihotki/SOMA';
 
 export class AboutPage implements SettingsPage {
   private info: AboutInfo | null = null;
@@ -261,12 +260,6 @@ export class AboutPage implements SettingsPage {
   private async copy(): Promise<void> {
     const r = await this.deps.api.copy().catch((e) => ({ ok: false, error: errText(e) }));
     this.deps.toast(r.ok ? 'System info copied. Paste it into a bug report or a message.' : `Could not copy: ${r.error ?? 'unknown error'}`, r.ok ? 'ok' : 'error');
-  }
-
-  private async setUpdateCheck(on: boolean): Promise<void> {
-    const r = await this.deps.setUpdateCheck(on).catch((e) => ({ ok: false, error: errText(e) }));
-    if (!r.ok) this.deps.toast(r.error ?? 'The setting could not be saved.', 'error');
-    this.render();
   }
 
   private link(label: string, url: string, title: string): HTMLElement {
@@ -294,14 +287,12 @@ export class AboutPage implements SettingsPage {
     copy.addEventListener('click', () => void this.copy());
     const kids: (HTMLElement | null)[] = [
       el('div', { className: 'st-about-hd' }, el('span', { className: 'st-logo' }, icon('logo', 34, 1.5)),
-        el('div', {}, el('h2', { className: 'st-h2', textContent: `SOMA ${a?.version ?? ''}`.trim() }), el('p', { className: 'st-lead', textContent: 'Solid Object Modeling with Agents' }), el('p', { className: 'st-lead', textContent: 'Author: Kai Jungsthöfel' }))),
-      el('div', { className: 'st-actions' }, copy, this.link('Project page', REPO, 'Source code, issues and releases on GitHub'), this.link('Changelog', `${REPO}/blob/main/CHANGELOG.md`, 'What changed in each version')),
+        el('div', {}, el('h2', { className: 'st-h2', textContent: `${APP_NAME} ${a?.version ?? ''}`.trim() }), el('p', { className: 'st-lead', textContent: 'A viewer for CadQuery models and drawings' }), el('p', { className: 'st-lead', textContent: 'Author: Kai Jungsthöfel' }))),
+      el('div', { className: 'st-actions' }, copy, this.link('Project page', REPO, 'Source code and issues on GitHub'), this.link('Changelog', `${REPO}/blob/main/CHANGELOG.md`, 'What changed in each version')),
       el('p', { className: 'st-license' },
-        'SOMA is free software under the GNU GPL, version 3 or later. The SOMA Model Exception makes sure that what you design belongs to you: your models, their files and everything SOMA creates from them.'),
+        'CAD Lab Viewer is free software under GNU GPL version 3 or later. The SOMA Model Exception covers your models and exports.'),
       el('div', { className: 'st-actions' }, this.link('License', `${REPO}/blob/main/LICENSE`, 'GNU General Public License, version 3'), this.link('Model Exception', `${REPO}/blob/main/MODEL-EXCEPTION.md`, 'Additional permission for your models')),
     ];
-    kids.push(group('Updates', field('Check for new versions', 'The start page asks GitHub once per session whether a newer release exists. SOMA downloads and installs nothing by itself.',
-      toggle('st-update', this.deps.updateCheck(), 'Check for new versions', (on) => void this.setUpdateCheck(on)))));
     if (this.error) kids.push(el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: `The information could not be collected: ${this.error}` })));
     if (!a) {
       kids.push(el('div', { className: 'st-wait', textContent: this.loading ? 'Collecting versions …' : '' }));
@@ -309,14 +300,10 @@ export class AboutPage implements SettingsPage {
       return;
     }
     kids.push(group('Versions', this.table([
-      ['SOMA app', a.version], ['soma (Python library)', pkg('soma')], ['Python', a.python.version ?? null], ['CadQuery', pkg('cadquery')], ['OCP (OpenCascade)', pkg('cadquery-ocp')],
+      [APP_NAME, a.version], ['soma (Python library)', pkg('soma')], ['Python', a.python.version ?? null], ['CadQuery', pkg('cadquery')], ['OCP (OpenCascade)', pkg('cadquery-ocp')],
       ['Electron', a.electron], ['Chromium', a.chrome], ['Node.js', a.node], ['Git', a.git], ['System', a.os],
     ])));
     if (a.python.error) kids.push(el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: `Python did not answer: ${a.python.error}` })));
-    kids.push(group('Agents', el('div', { className: 'st-agents' }, ...(a.agents.length ? a.agents.map((x) => el('div', { className: `st-agent ${x.found ? 'ok' : 'no'}` },
-      el('span', { className: 'st-agent-ico' }, icon(x.found ? 'check' : 'x', 14, 2.2)), el('b', { textContent: x.label }),
-      el('span', { className: 'c3', textContent: x.found ? `found (${x.command})` : `not installed (${x.command})` })))
-      : [el('span', { className: 'c3', textContent: 'No agents were checked.' })]))));
     kids.push(group('Folders', el('div', { className: 'st-kv paths' }, ...a.paths.flatMap((p) => {
       const area: StorageArea | null = p.label === 'App data' ? 'appdata' : p.label === 'Your skills' ? 'skills' : p.label === 'Logs' ? 'logs' : null;
       const open = area ? el('button', { className: 'ibtn s', title: 'Open the folder' }, icon('folder', 14, 1.8)) : null;
